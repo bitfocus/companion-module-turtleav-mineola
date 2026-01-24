@@ -1,16 +1,16 @@
 {
-	"id": "your-module-name",
-	"name": "your-module-name",
-	"shortname": "module-shortname",
+	"id": "turtleav-mineola",
+	"name": "turtleav-mineola",
+	"shortname": "Mineola Dante Bridge",
 	"description": "A short one line description of your module",
 	"version": "0.0.0",
 	"license": "MIT",
-	"repository": "git+https://github.com/bitfocus/companion-module-your-module-name.git",
-	"bugs": "https://github.com/bitfocus/companion-module-your-module-name/issues",
+	"repository": "git+https://github.com/phillipivan/companion-module-turtleav-mineola.git",
+	"bugs": "https://github.com/phillipivan/companion-module-turtleav-mineola/issues",
 	"maintainers": [
 		{
-			"name": "Your name",
-			"email": "Your email"
+			"name": "Phillip Ivan Pietruschka",
+			"email": ""
 		}
 	],
 	"runtime": {
@@ -20,7 +20,7 @@
 		"entrypoint": "../dist/main.js"
 	},
 	"legacyIds": [],
-	"manufacturer": "Your company",
-	"products": ["Your product"],
-	"keywords": []
+	"manufacturer": "Turtle AV",
+	"products": ["Mineola 2x2", "Mineola 4x4", "Mineola 8x8", "Mineola 16x16"],
+	"keywords": ["Dante"]
 }
