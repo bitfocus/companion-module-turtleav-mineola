@@ -8,7 +8,7 @@ const BinaryBooleanSchema = z.union([z.literal(0), z.literal(1)]).transform((n) 
 /**********************/
 
 export const SetResponseSchema = z.object({
-	comhead: SetMessage,
+	comhead: z.enum(SetMessage),
 	result: z.int(),
 })
 
@@ -21,6 +21,10 @@ export const MessageErrorSchema = z.object({
 })
 
 export type MessageErrorSchema = z.infer<typeof MessageErrorSchema>
+
+export const SetOrErrorResponseSchema = z.union([SetResponseSchema, MessageErrorSchema])
+
+export type SetOrErrorResponse = z.infer<typeof SetOrErrorResponseSchema>
 
 /**********************/
 /*    Input Status    */
@@ -71,22 +75,23 @@ export type InputStatus = z.infer<typeof InputStatusSchema>
 
 const createOutputStatusSchema = <T extends 2 | 4 | 8 | 16>(size: T) => {
 	const numberTuple = z.tuple(Array(size).fill(z.number()) as [z.ZodNumber, z.ZodNumber, ...z.ZodNumber[]])
-	const binaryBooleanTuple = z.tuple(
+	/* 	const binaryBooleanTuple = z.tuple(
 		Array(size).fill(BinaryBooleanSchema) as [
 			typeof BinaryBooleanSchema,
 			typeof BinaryBooleanSchema,
 			...(typeof BinaryBooleanSchema)[],
 		],
-	)
+	) */
+	const binaryBooleanArray = z.array(BinaryBooleanSchema).length(size)
 	const stringTuple = z.tuple(Array(size).fill(z.string()) as [z.ZodString, z.ZodString, ...z.ZodString[]])
 
 	return z.object({
 		power: BinaryBooleanSchema,
 		output_master_vol_value: z.number(),
 		output_master_vol_mute: BinaryBooleanSchema,
-		master_out_member: binaryBooleanTuple,
+		master_out_member: binaryBooleanArray,
 		output_gain: numberTuple,
-		output_volume_mute: binaryBooleanTuple,
+		output_volume_mute: binaryBooleanArray,
 		output_audio_delay: numberTuple,
 		output_name: stringTuple,
 		select_level: numberTuple,

@@ -3,6 +3,7 @@ import { InputStatusSchema, OutputStatusSchema, PresetStatusSchema, InformationS
 import type { InputStatus, OutputStatus, PresetStatus, InformationStatus } from './schemas.js'
 import { AxiosResponse } from 'axios'
 import EventEmitter from 'events'
+import { DropdownChoice } from '@companion-module/base'
 
 export interface MineolaEvents {
 	inputs: []
@@ -18,6 +19,11 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 	#outputs!: OutputStatus
 	#presets!: PresetStatus
 	#information!: InformationStatus
+	#power: boolean = false
+	#outputMaster = {
+		volume: 0,
+		mute: false,
+	}
 
 	private constructor(inputs: InputStatus, outputs: OutputStatus, presets: PresetStatus, info: InformationStatus) {
 		super()
@@ -25,6 +31,9 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		this.#outputs = outputs
 		this.#presets = presets
 		this.#information = info
+		this.power = info.power
+		this.outputMasterMute = info.output_master_vol_mute
+		this.outputMasterVolume = info.output_master_vol_value
 	}
 
 	public static createMineola(
@@ -59,83 +68,40 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 
 	public set inputs(inputs: AxiosResponse<any, any>) {
 		const ins = InputStatusSchema.parse(inputs.data)
+		this.power = ins.power
 		if (isEqual(this.#inputs, ins)) return
 		this.#inputs = ins
 		this.emit('inputs')
-		if (this.#outputs.power === ins.power) return
-		this.#outputs.power = this.#inputs.power
-		this.#information.power = this.#inputs.power
-		this.#presets.power = this.#inputs.power
-		this.emit('power')
 	}
 
 	public set outputs(outputs: AxiosResponse<any, any>) {
 		const outs = OutputStatusSchema.parse(outputs.data)
+		this.power = outs.power
+		this.outputMasterMute = outs.output_master_vol_mute
+		this.outputMasterVolume = outs.output_master_vol_value
 		if (isEqual(this.#outputs, outs)) return
 		this.#outputs = outs
 		this.emit('inputs')
-		if (this.#inputs.power !== outs.power) {
-			this.#inputs.power = this.#outputs.power
-			this.#presets.power = this.#outputs.power
-			this.#information.power = this.#outputs.power
-			this.emit('power')
-		}
-		if (
-			this.#presets.o_master_vol_mute !== outs.output_master_vol_mute ||
-			this.#presets.o_master_vol_value !== outs.output_master_vol_value
-		) {
-			this.#presets.o_master_vol_mute = this.#outputs.output_master_vol_mute
-			this.#information.output_master_vol_mute = this.#outputs.output_master_vol_mute
-			this.#presets.o_master_vol_value = this.#outputs.output_master_vol_value
-			this.#information.output_master_vol_value = this.#outputs.output_master_vol_value
-			this.emit('outputMaster')
-		}
 	}
 
 	public set presets(preset: AxiosResponse<any, any>) {
 		const presets = PresetStatusSchema.parse(preset.data)
+		this.power = presets.power
+		this.outputMasterMute = presets.o_master_vol_mute
+		this.outputMasterVolume = presets.o_master_vol_value
 		if (isEqual(this.#presets, presets)) return
 		this.#presets = presets
 		this.emit('presets')
-		if (presets.power !== this.#inputs.power) {
-			this.#inputs.power = presets.power
-			this.#outputs.power = presets.power
-			this.#information.power = presets.power
-			this.emit('power')
-		}
-		if (
-			this.#outputs.output_master_vol_mute !== presets.o_master_vol_mute ||
-			this.#outputs.output_master_vol_value !== presets.o_master_vol_value
-		) {
-			this.#outputs.output_master_vol_mute = presets.o_master_vol_mute
-			this.#information.output_master_vol_mute = presets.o_master_vol_mute
-			this.#outputs.output_master_vol_value = presets.o_master_vol_value
-			this.#information.output_master_vol_value = presets.o_master_vol_value
-			this.emit('outputMaster')
-		}
 	}
 
 	public set info(info: AxiosResponse<any, any>) {
 		const infomation = InformationStatusSchema.parse(info.data)
+		this.power = infomation.power
+		this.outputMasterMute = infomation.output_master_vol_mute
+		this.outputMasterVolume = infomation.output_master_vol_value
 		if (isEqual(this.#information, infomation)) return
 		this.#information = infomation
 		this.emit('information')
-		if (infomation.power !== this.#inputs.power) {
-			this.#inputs.power = infomation.power
-			this.#outputs.power = infomation.power
-			this.#presets.power = infomation.power
-			this.emit('power')
-		}
-		if (
-			this.#outputs.output_master_vol_mute !== infomation.output_master_vol_mute ||
-			this.#outputs.output_master_vol_value !== infomation.output_master_vol_value
-		) {
-			this.#outputs.output_master_vol_mute = infomation.output_master_vol_mute
-			this.#presets.o_master_vol_mute = infomation.output_master_vol_mute
-			this.#outputs.output_master_vol_value = infomation.output_master_vol_value
-			this.#presets.o_master_vol_value = infomation.output_master_vol_value
-			this.emit('outputMaster')
-		}
 	}
 
 	get inputCount(): number {
@@ -148,5 +114,58 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 
 	get presetCount(): number {
 		return this.#presets.name.length
+	}
+
+	get power(): boolean {
+		return this.#power
+	}
+
+	set power(state: boolean) {
+		if (this.#power == state) return
+		this.#power = state
+		this.emit('power')
+	}
+
+	get outputMasterMute(): boolean {
+		return this.#outputMaster.mute
+	}
+
+	set outputMasterMute(state: boolean) {
+		if (this.#outputMaster.mute == state) return
+		this.#outputMaster.mute = state
+		this.emit('outputMaster')
+	}
+
+	get outputMasterVolume(): number {
+		return this.#outputMaster.volume
+	}
+
+	set outputMasterVolume(value: number) {
+		if (this.#outputMaster.volume == value) return
+		this.#outputMaster.volume = value
+		this.emit('outputMaster')
+	}
+
+	get inputChoices(): DropdownChoice[] {
+		const choices: DropdownChoice[] = []
+		this.#inputs.input_name.forEach((value, index) => {
+			choices.push({ id: index, label: value })
+		})
+		return choices
+	}
+
+	get outputChoices(): DropdownChoice[] {
+		const choices: DropdownChoice[] = []
+		this.#outputs.output_name.forEach((value, index) => {
+			choices.push({ id: index, label: value })
+		})
+		return choices
+	}
+
+	set outputMasterMember(value: { source: number; onoff: boolean }) {
+		if (this.#outputs.master_out_member[value.source] == undefined) throw new Error('Output out of range')
+		if (this.#outputs.master_out_member[value.source] === value.onoff) return
+		this.#outputs.master_out_member[value.source] = value.onoff
+		this.emit('outputs')
 	}
 }

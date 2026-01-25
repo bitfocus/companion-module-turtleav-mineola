@@ -69,6 +69,9 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			this.createClient(config.host)
 			await this.setupDevice()
 			this.throttledUpdateActionFeedbackDefs()
+			await this.pollIO()
+			await this.pollPresets()
+			await this.pollInfo()
 		} catch (err) {
 			handleError(err, this)
 		}
@@ -99,10 +102,10 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 	public async httpPost(data: HttpMessage, priority: number = 1): Promise<AxiosResponse<any, any>> {
 		return await this.#queue.add(
-			async () => {
+			async ({ signal }) => {
 				if (!this.#client) throw new Error('Axios Client not initialised')
 				const response = await this.#client
-					.post('', data, { signal: this.#controller.signal })
+					.post('', data, { signal: signal })
 					.then((response: AxiosResponse<any, any>) => {
 						this.statusManager.updateStatus(InstanceStatus.Ok, response.statusText)
 						this.debug(
@@ -124,6 +127,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			const presets = await this.httpPost({ comhead: 'get_preset_status' })
 			const info = await this.httpPost({ comhead: 'get_information_status' })
 			this.mineola = Mineola.createMineola(inputs, outputs, presets, info)
+			this.updateAllDefs()
 			const handleFeedbackEvent = (eventType: keyof typeof this.feedbackSubscriptions) => {
 				this.feedbackSubscriptions[eventType].forEach((id) => this.#feedbackIdsToCheck.add(id))
 				this.throttledCheckFeedbacksById()
@@ -147,12 +151,17 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		{ edges: ['trailing'], signal: this.#controller.signal },
 	)
 
+	updateAllDefs(): void {
+		this.updateActions() // export actions
+		this.updateFeedbacks() // export feedbacks
+		this.updateVariableDefinitions() // export variable definitions
+		this.updatePresets()
+	}
+
 	throttledUpdateActionFeedbackDefs = throttle(
 		() => {
-			this.updateActions() // export actions
-			this.updateFeedbacks() // export feedbacks
-			this.updateVariableDefinitions() // export variable definitions
-			this.updatePresets()
+			this.debug(`Updating Action / Feedback / Variable / Preset definitions`)
+			this.updateAllDefs()
 			this.checkFeedbacks()
 		},
 		5000,
@@ -166,10 +175,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				const inputs = await this.httpPost({ comhead: 'get_input_status' })
 				this.mineola.inputs = inputs
 			}
-			if (this.feedbackSubscriptions.outputs.size > 0) {
-				const outputs = await this.httpPost({ comhead: 'get_output_status' })
-				this.mineola.inputs = outputs
-			}
+			const outputs = await this.httpPost({ comhead: 'get_output_status' })
+			this.mineola.outputs = outputs
 		} catch (err) {
 			handleError(err, this)
 		}

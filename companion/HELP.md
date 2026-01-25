@@ -4,6 +4,11 @@ The module uses HTTP to control the Mineola
 
 ### Actions
 
+- Output Master - Mute
+- Output Master - Volume
+
+- Power
+
 ### Feedbacks
 
 - Information - DEP SDK

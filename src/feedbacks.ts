@@ -124,17 +124,17 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 	}
 
 	// Power & Output Master
-	feedbacks.power = createSimpleFeedback('Power', 'power', () => self.mineola.info.power, 'boolean')
+	feedbacks.power = createSimpleFeedback('Power', 'power', () => self.mineola.power, 'boolean')
 	feedbacks.outputMasterMute = createSimpleFeedback(
 		'Output Master - Mute',
 		'outputMaster',
-		() => self.mineola.info.output_master_vol_mute,
+		() => self.mineola.outputMasterMute,
 		'boolean',
 	)
 	feedbacks.outputMasterVolume = createSimpleFeedback(
 		'Output Master - Volume',
 		'outputMaster',
-		() => self.mineola.info.output_master_vol_value,
+		() => self.mineola.outputMasterVolume,
 	)
 
 	// Input feedbacks
@@ -143,7 +143,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'Input',
 		self.mineola.inputCount,
 		'inputs',
-		(chan) => self.mineola.inputs.input_mute[chan],
+		(chan) => self.mineola.inputs.input_mute[chan - 1],
 		'boolean',
 	)
 	feedbacks.inputP48 = createChannelFeedback(
@@ -151,7 +151,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'Input',
 		self.mineola.inputCount,
 		'inputs',
-		(chan) => self.mineola.inputs.input_phantom_power[chan],
+		(chan) => self.mineola.inputs.input_phantom_power[chan - 1],
 		'boolean',
 	)
 	feedbacks.inputGain = createChannelFeedback(
@@ -159,21 +159,21 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'Input',
 		self.mineola.inputCount,
 		'inputs',
-		(chan) => self.mineola.inputs.input_gain[chan],
+		(chan) => self.mineola.inputs.input_gain[chan - 1],
 	)
 	feedbacks.inputSensitivity = createChannelFeedback(
 		'Input - Sensitivity',
 		'Input',
 		self.mineola.inputCount,
 		'inputs',
-		(chan) => self.mineola.inputs.input_sensitivity[chan],
+		(chan) => self.mineola.inputs.input_sensitivity[chan - 1],
 	)
 	feedbacks.inputName = createChannelFeedback(
 		'Input - Name',
 		'Input',
 		self.mineola.inputCount,
 		'inputs',
-		(chan) => self.mineola.inputs.input_name[chan],
+		(chan) => self.mineola.inputs.input_name[chan - 1],
 	)
 
 	// Output feedbacks
@@ -182,7 +182,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'Output',
 		self.mineola.outputCount,
 		'outputs',
-		(chan) => self.mineola.outputs.output_volume_mute[chan],
+		(chan) => self.mineola.outputs.output_volume_mute[chan - 1],
 		'boolean',
 	)
 	feedbacks.outputMasterOutMember = createChannelFeedback(
@@ -190,7 +190,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'Output',
 		self.mineola.outputCount,
 		'outputs',
-		(chan) => self.mineola.outputs.master_out_member[chan],
+		(chan) => self.mineola.outputs.master_out_member[chan - 1],
 		'boolean',
 	)
 	feedbacks.outputGain = createChannelFeedback(
@@ -198,21 +198,21 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'Output',
 		self.mineola.outputCount,
 		'outputs',
-		(chan) => self.mineola.outputs.output_gain[chan],
+		(chan) => self.mineola.outputs.output_gain[chan - 1],
 	)
 	feedbacks.outputDelay = createChannelFeedback(
 		'Output - Delay',
 		'Output',
 		self.mineola.outputCount,
 		'outputs',
-		(chan) => self.mineola.outputs.output_audio_delay[chan],
+		(chan) => self.mineola.outputs.output_audio_delay[chan - 1],
 	)
 	feedbacks.outputName = createChannelFeedback(
 		'Output - Name',
 		'Output',
 		self.mineola.outputCount,
 		'outputs',
-		(chan) => self.mineola.outputs.output_name[chan],
+		(chan) => self.mineola.outputs.output_name[chan - 1],
 	)
 
 	// Preset feedbacks
@@ -221,7 +221,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'Preset',
 		self.mineola.presetCount,
 		'presets',
-		(chan) => self.mineola.presets.valid[chan],
+		(chan) => self.mineola.presets.valid[chan - 1],
 		'boolean',
 	)
 	feedbacks.presetName = createChannelFeedback(
@@ -229,7 +229,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'Preset',
 		self.mineola.presetCount,
 		'presets',
-		(chan) => self.mineola.presets.name[chan],
+		(chan) => self.mineola.presets.name[chan - 1],
 	)
 
 	// Information feedbacks
