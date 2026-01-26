@@ -9,6 +9,7 @@ export const GetMessage = [
 	'get_level', // Only supported on websocket
 	'get_system_status',
 	'get_dsp_status',
+	'get_network',
 	'export_data',
 ] as const
 
