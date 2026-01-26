@@ -6,6 +6,10 @@ export const GetMessage = [
 	'get_preset_status',
 	'get_information_status',
 	'get_peq_status',
+	'get_dsp_status',
+	'get_level',
+	'get_system_status',
+	'get_network',
 ] as const
 
 export type GetMessage = (typeof GetMessage)[number]
@@ -27,6 +31,8 @@ export const SetMessage = [
 	'set_input_gain',
 	'set_input_phantom_power',
 	'set_input_mute',
+	'set_input_sensitivity',
+	'set_input_name',
 	'set_peq_reset',
 	'set_peq_preset',
 	'set_peq_bypass',
@@ -70,6 +76,7 @@ level 0 - +20dBu
 {"comhead":"set_output_delay","source":0,"delay":50}
 {"comhead":"set_output_mute","source":0,"mute":1}
 
+{"comhead":"set_input_name","source":0,"name":"Ch 1"}
 {"comhead":"set_input_gain","source":0,"gain":-12}
 {"comhead":"set_input_gain","source":0,"gain":2.3}
 {"comhead":"set_input_gain","source":0,"gain":12}

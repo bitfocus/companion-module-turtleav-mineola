@@ -204,10 +204,10 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		this.emit('outputs')
 	}
 
-	set presetName(value: { source: number; name: string }) {
-		if (this.#presets.name[value.source] == undefined) throw new Error('Preset out of range')
-		if (this.#presets.name[value.source] == value.name) return
-		this.#presets.name[value.source] = value.name
+	set presetName(value: { index: number; name: string }) {
+		if (this.#presets.name[value.index] == undefined) throw new Error('Preset out of range')
+		if (this.#presets.name[value.index] == value.name) return
+		this.#presets.name[value.index] = value.name
 		this.emit('presets')
 	}
 	set presetClear(index: number) {

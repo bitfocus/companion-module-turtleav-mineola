@@ -1,46 +1,87 @@
 ## Turtle AV Mineola
 
-The module uses HTTP to control the Mineola
+This module uses HTTP to control the Turtle AV Mineola audio processor.
+
+---
 
 ### Actions
 
-- Output - Master Output Member
+#### Power
 
-- Output Master - Mute
-- Output Master - Volume
+- **Power** - Turn the device on/off or toggle
 
-- Power
+#### Input Controls
+
+- **Gain** - Adjust input gain (-12dB to +12dB)
+- **Mute** - Mute/unmute input channels
+- **Name** - Set input channel name
+- **Phantom Power** - Enable/disable 48V phantom power
+- **Sensitivity** - Set input sensitivity level (+24dBu, +14dBu, +4dBu, 0dBV, -18dBV, -35dBV)
+
+#### Output Controls
+
+- **Delay** - Set output audio delay (0-50ms)
+- **Gain** - Adjust output gain (-60dB to +12dB)
+- **Level** - Set output reference level (+20dBu, +14dBu, +4dBu, 0dBV, -18dBV)
+- **Master Output Member** - Add/remove output from master group
+- **Mute** - Mute/unmute output channels
+- **Name** - Set output channel name
+
+#### Output Master
+
+- **Mute** - Mute/unmute master output
+- **Volume** - Adjust master output volume (0-100)
+
+#### Preset Management
+
+- **Clear** - Clear a preset slot
+- **Name** - Set preset name
+- **Recall** - Load a saved preset
+- **Save** - Save current settings to preset
+
+---
 
 ### Feedbacks
 
-- Information - DEP SDK
-- Information - Hostname
-- Information - MAC Address Primary
-- Information - MAC Address Secondary
-- Information - MCU Version
-- Information - Model Name
-- Information - Version
+#### Device Information
 
-- Input - Gain
-- Input - Mute
-- Input - Name
-- Input - Phantom Power
-- Input - Sensitivity
+- DEP SDK version
+- Hostname
+- IP Address (Primary & Secondary)
+- MAC Address (Primary & Secondary)
+- MCU Version
+- Model Name
+- Firmware Version
 
-- Output - Delay
-- Output - Gain
-- Output - Mute
-- Output - Master Output Member
-- Output - Name
+#### Input Status
 
-- Output Master - Mute
-- Output Master - Volume
+- Gain level
+- Mute state
+- Channel name
+- Phantom power state
+- Sensitivity level
 
-- Power
+#### Output Status
 
-- Preset - Name
-- Preset - Valid
+- Audio delay
+- Gain level
+- Master output membership
+- Mute state
+- Channel name
+
+#### Output Master Status
+
+- Mute state
+- Volume level
+
+#### Power & Presets
+
+- Power state
+- Preset name
+- Preset validity
+
+---
 
 ### Variables
 
-Use value feedbacks
+All feedback values are available as variables for use in button text and expressions.

@@ -268,6 +268,16 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'information',
 		() => self.mineola.info.secondary_mac_address,
 	)
+	feedbacks.infoIpPri = createSimpleFeedback(
+		'Information - IP Address Primary',
+		'information',
+		() => self.mineola.info.ip_address,
+	)
+	feedbacks.infoIpSec = createSimpleFeedback(
+		'Information - IP Address Secondary',
+		'information',
+		() => self.mineola.info.secondary_ip_address,
+	)
 
 	self.setFeedbackDefinitions(feedbacks)
 }

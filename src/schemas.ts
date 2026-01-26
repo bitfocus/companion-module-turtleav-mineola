@@ -180,3 +180,78 @@ export const PEQStatusSchema = z.object({
 
 export type PEQStatus = z.infer<typeof PEQStatusSchema>
 export type PEQBand = z.infer<typeof PEQBandSchema>
+
+/**********************/
+/*     Dsp Status     */
+/**********************/
+
+export const DSPStatusSchema = z.object({
+	power: BinaryBooleanSchema,
+	output_master_vol_value: z.number().int().min(0).max(100),
+	output_master_vol_mute: BinaryBooleanSchema,
+	comhead: z.literal('get_dsp_status'),
+})
+
+export type DSPStatus = z.infer<typeof DSPStatusSchema>
+
+/**********************/
+/*   System Status    */
+/**********************/
+
+export const SystemStatusSchema = z.object({
+	power: BinaryBooleanSchema,
+	output_master_vol_value: z.number().int().min(0).max(100),
+	output_master_vol_mute: BinaryBooleanSchema,
+	macaddress: z.string(),
+	standby_mode: z.int(),
+	auto_standby_time: z.int(),
+	comhead: z.literal('get_system_status'),
+})
+
+export type SystemStatus = z.infer<typeof SystemStatusSchema>
+
+/**********************/
+/*   Network Status    */
+/**********************/
+
+export const NetworkStatusSchema = z.object({
+	power: BinaryBooleanSchema,
+	ip_mode: z.number(),
+	tcpip_port: z.number(),
+	telnet_port: z.number(),
+	ip_address: z.string(),
+	subnet_mask: z.string(),
+	dnsserver: z.string(),
+	gateway: z.string(),
+	static_ip_address: z.string(),
+	static_subnet_mask: z.string(),
+	static_gateway: z.string(),
+	secondary_ip_mode: z.number(),
+	secondary_ip_address: z.string(),
+	secondary_subnet_mask: z.string(),
+	secondary_gateway: z.string(),
+	secondary_static_ip_address: z.string(),
+	secondary_static_subnet_mask: z.string(),
+	secondary_static_gateway: z.string(),
+	macaddress: z.string(),
+	domain_name: z.string(),
+	output_master_vol_value: z.int().min(0).max(100),
+	output_master_vol_mute: BinaryBooleanSchema,
+	comhead: z.literal('get_network'),
+	result: z.literal(1),
+})
+
+export type NetworkStatus = z.infer<typeof NetworkStatusSchema>
+
+/**********************/
+/*       Levels       */
+/* Only on websocket  */
+/**********************/
+
+export const LevelStatusSchema = z.object({
+	input_level: z.array(z.number()),
+	output_level: z.array(z.number()),
+	comhead: z.literal('get_level'),
+})
+
+export type LevelStatus = z.infer<typeof LevelStatusSchema>

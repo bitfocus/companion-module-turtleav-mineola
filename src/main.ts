@@ -7,24 +7,28 @@ import { handleError } from './errors.js'
 import { UpdateFeedbacks } from './feedbacks.js'
 import { UpdatePresets } from './presets.js'
 import { StatusManager } from './status.js'
-import { Mineola, MineolaEvents } from './mineola.js'
+import { Mineola, type MineolaEvents } from './mineola.js'
 import type { HttpMessage } from './types.js'
 import axios, { AxiosInstance, AxiosResponse } from 'axios'
 import PQueue from 'p-queue'
 import { throttle } from 'es-toolkit'
 
-const IO_POLL_INTERVAL = 250
-const PRESET_POLL_INTERVAL = 5000
-const INFORMATION_POLL_INTERVAL = 30000
+const POLL_INTERVALS = {
+	IO: 250,
+	PRESET: 5000,
+	INFORMATION: 30000,
+} as const
+
+type FeedbackCategory = keyof MineolaEvents
 
 export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	#config!: ModuleConfig // Setup in init()
 	#client!: AxiosInstance
-	#queue = new PQueue({ concurrency: 1 })
+	#queue = new PQueue({ concurrency: 4 })
 	#controller = new AbortController()
 	public mineola!: Mineola
 	public statusManager = new StatusManager(this, { status: InstanceStatus.Connecting, message: 'Initialising' }, 2000)
-	public feedbackSubscriptions = {
+	public feedbackSubscriptions: Record<FeedbackCategory, Set<string>> = {
 		inputs: new Set<string>(),
 		outputs: new Set<string>(),
 		presets: new Set<string>(),
@@ -33,9 +37,11 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		outputMaster: new Set<string>(),
 	}
 	#feedbackIdsToCheck = new Set<string>()
-	#ioPollTimer: NodeJS.Timeout | undefined = undefined
-	#presetTimer: NodeJS.Timeout | undefined = undefined
-	#informationPollTimer: NodeJS.Timeout | undefined = undefined
+	#pollTimers = {
+		io: undefined as NodeJS.Timeout | undefined,
+		preset: undefined as NodeJS.Timeout | undefined,
+		information: undefined as NodeJS.Timeout | undefined,
+	}
 
 	constructor(internal: unknown) {
 		super(internal)
@@ -43,54 +49,55 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 	async init(config: ModuleConfig): Promise<void> {
 		this.#config = config
-
 		this.statusManager.updateStatus(InstanceStatus.Connecting)
-
-		this.configUpdated(config).catch(() => {})
+		await this.configUpdated(config)
 	}
-	// When module gets deleted
+
 	async destroy(): Promise<void> {
 		this.log('debug', `destroy ${this.id}: ${this.label}`)
+		this.#cleanup()
+	}
+
+	#cleanup(): void {
 		this.#queue.clear()
 		this.#controller.abort()
-		if (this.#ioPollTimer) clearTimeout(this.#ioPollTimer)
-		if (this.#presetTimer) clearTimeout(this.#presetTimer)
-		if (this.#informationPollTimer) clearTimeout(this.#informationPollTimer)
+		Object.values(this.#pollTimers).forEach((timer) => {
+			if (timer) clearTimeout(timer)
+		})
 	}
 
 	async configUpdated(config: ModuleConfig): Promise<void> {
 		this.#config = config
+		this.debug('Config Updated')
 		this.debug(config)
 
-		this.#controller.abort()
-
+		// Cleanup old connections
+		this.#cleanup()
 		this.#controller = new AbortController()
+
 		try {
-			this.createClient(config.host)
-			await this.setupDevice()
+			this.#createClient(config.host)
+			await this.#setupDevice()
 			this.updateAllDefs()
-			await this.pollIO()
-			await this.pollPresets()
-			await this.pollInfo()
+			await this.#startPolling()
 			this.checkFeedbacks()
 		} catch (err) {
 			handleError(err, this)
 		}
 	}
 
-	// Return config fields for web config
 	getConfigFields(): SomeCompanionConfigField[] {
 		return GetConfigFields()
 	}
 
 	public debug(msg: string | object): void {
 		if (this.#config.verbose) {
-			if (typeof msg == 'object') msg = JSON.stringify(msg)
-			this.log('debug', `${msg}`)
+			const message = typeof msg === 'object' ? JSON.stringify(msg) : msg
+			this.log('debug', message)
 		}
 	}
 
-	private createClient(host = this.#config.host): void {
+	#createClient(host = this.#config.host): void {
 		if (!host) {
 			this.statusManager.updateStatus(InstanceStatus.BadConfig, 'No host')
 			return
@@ -101,45 +108,51 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		})
 	}
 
-	public async httpPost(data: HttpMessage, priority: number = 1): Promise<AxiosResponse<any, any>> {
+	public async httpPost(data: HttpMessage, priority: number = 1): Promise<AxiosResponse> {
 		return await this.#queue.add(
 			async ({ signal }) => {
 				if (!this.#client) throw new Error('Axios Client not initialised')
-				const response = await this.#client
-					.post('', data, { signal: signal })
-					.then((response: AxiosResponse<any, any>) => {
-						this.statusManager.updateStatus(InstanceStatus.Ok, response.statusText)
-						this.debug(
-							`Successful HTTP Post to http://${this.#config.host}/cgi-bin?instr.cgi with post data ${JSON.stringify(data)}\nResponse data:`,
-						)
-						this.debug(response.data)
-						return response
-					})
+
+				const response = await this.#client.post('', data, { signal })
+
+				this.statusManager.updateStatus(InstanceStatus.Ok, response.statusText)
+				this.debug(
+					`Successful HTTP Post to http://${this.#config.host}/cgi-bin?instr.cgi with post data ${JSON.stringify(data)}\nResponse data:`,
+				)
+				this.debug(response.data)
+
 				return response
 			},
-			{ priority: priority, signal: this.#controller.signal },
+			{ priority, signal: this.#controller.signal },
 		)
 	}
 
-	async setupDevice(): Promise<void> {
+	async #setupDevice(): Promise<void> {
 		try {
-			const inputs = await this.httpPost({ comhead: 'get_input_status' })
-			const outputs = await this.httpPost({ comhead: 'get_output_status' })
-			const presets = await this.httpPost({ comhead: 'get_preset_status' })
-			const info = await this.httpPost({ comhead: 'get_information_status' })
-			this.mineola = Mineola.createMineola(inputs, outputs, presets, info)
-			this.updateAllDefs()
-			const handleFeedbackEvent = (eventType: keyof typeof this.feedbackSubscriptions) => {
-				this.feedbackSubscriptions[eventType].forEach((id) => this.#feedbackIdsToCheck.add(id))
-				this.throttledCheckFeedbacksById()
-			}
+			// Fetch all initial state in parallel
+			const [inputs, outputs, presets, info] = await Promise.all([
+				this.httpPost({ comhead: 'get_input_status' }),
+				this.httpPost({ comhead: 'get_output_status' }),
+				this.httpPost({ comhead: 'get_preset_status' }),
+				this.httpPost({ comhead: 'get_information_status' }),
+			])
 
-			;(Object.keys(this.feedbackSubscriptions) as Array<keyof MineolaEvents>).forEach((event) => {
-				this.mineola.on(event, () => handleFeedbackEvent(event))
-			})
+			this.mineola = Mineola.createMineola(inputs, outputs, presets, info)
+			this.#setupFeedbackEventHandlers()
 		} catch (err) {
 			handleError(err, this)
 		}
+	}
+
+	#setupFeedbackEventHandlers(): void {
+		const handleFeedbackEvent = (eventType: FeedbackCategory) => {
+			this.feedbackSubscriptions[eventType].forEach((id) => this.#feedbackIdsToCheck.add(id))
+			this.throttledCheckFeedbacksById()
+		}
+
+		;(Object.keys(this.feedbackSubscriptions) as FeedbackCategory[]).forEach((event) => {
+			this.mineola.on(event, () => handleFeedbackEvent(event))
+		})
 	}
 
 	throttledCheckFeedbacksById = throttle(
@@ -154,9 +167,9 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 	updateAllDefs(): void {
 		try {
-			this.updateActions() // export actions
-			this.updateFeedbacks() // export feedbacks
-			this.updateVariableDefinitions() // export variable definitions
+			this.updateActions()
+			this.updateFeedbacks()
+			this.updateVariableDefinitions()
 			this.updatePresets()
 		} catch (err) {
 			handleError(err, this)
@@ -173,25 +186,52 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		{ edges: ['trailing'], signal: this.#controller.signal },
 	)
 
-	async pollIO(): Promise<void> {
-		if (this.#ioPollTimer) clearTimeout(this.#ioPollTimer)
+	async #startPolling(): Promise<void> {
+		await Promise.all([this.#pollIO(), this.#pollPresets(), this.#pollInfo()])
+	}
+
+	async #pollIO(): Promise<void> {
+		if (this.#pollTimers.io) clearTimeout(this.#pollTimers.io)
+
 		try {
-			if (this.feedbackSubscriptions.inputs.size > 0) {
-				const inputs = await this.httpPost({ comhead: 'get_input_status' })
-				this.mineola.inputs = inputs
+			const shouldPollInputs = this.feedbackSubscriptions.inputs.size > 0
+			const shouldPollOutputs =
+				this.feedbackSubscriptions.outputs.size > 0 ||
+				this.feedbackSubscriptions.power.size > 0 ||
+				this.feedbackSubscriptions.outputMaster.size > 0
+
+			// Fetch both in parallel if needed
+			const requests = []
+			if (shouldPollInputs) {
+				requests.push(
+					this.httpPost({ comhead: 'get_input_status' }).then((inputs) => {
+						this.mineola.inputs = inputs
+					}),
+				)
 			}
-			const outputs = await this.httpPost({ comhead: 'get_output_status' })
-			this.mineola.outputs = outputs
+			if (shouldPollOutputs) {
+				requests.push(
+					this.httpPost({ comhead: 'get_output_status' }).then((outputs) => {
+						this.mineola.outputs = outputs
+					}),
+				)
+			}
+
+			if (requests.length > 0) {
+				await Promise.all(requests)
+			}
 		} catch (err) {
 			handleError(err, this)
 		}
-		this.#ioPollTimer = setTimeout(() => {
-			this.pollIO().catch(() => {})
-		}, IO_POLL_INTERVAL)
+
+		this.#pollTimers.io = setTimeout(() => {
+			this.#pollIO().catch(() => {})
+		}, POLL_INTERVALS.IO)
 	}
 
-	async pollPresets(): Promise<void> {
-		if (this.#presetTimer) clearTimeout(this.#presetTimer)
+	async #pollPresets(): Promise<void> {
+		if (this.#pollTimers.preset) clearTimeout(this.#pollTimers.preset)
+
 		try {
 			if (this.feedbackSubscriptions.presets.size > 0) {
 				const presets = await this.httpPost({ comhead: 'get_preset_status' }, 0)
@@ -200,23 +240,27 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		} catch (err) {
 			handleError(err, this)
 		}
-		this.#presetTimer = setTimeout(() => {
-			this.pollPresets().catch(() => {})
-		}, PRESET_POLL_INTERVAL)
+
+		this.#pollTimers.preset = setTimeout(() => {
+			this.#pollPresets().catch(() => {})
+		}, POLL_INTERVALS.PRESET)
 	}
-	async pollInfo(): Promise<void> {
-		if (this.#informationPollTimer) clearTimeout(this.#informationPollTimer)
+
+	async #pollInfo(): Promise<void> {
+		if (this.#pollTimers.information) clearTimeout(this.#pollTimers.information)
+
 		try {
 			if (this.feedbackSubscriptions.information.size > 0) {
-				const presets = await this.httpPost({ comhead: 'get_preset_status' }, 0)
-				this.mineola.presets = presets
+				const info = await this.httpPost({ comhead: 'get_information_status' }, 0)
+				this.mineola.info = info
 			}
 		} catch (err) {
 			handleError(err, this)
 		}
-		this.#informationPollTimer = setTimeout(() => {
-			this.pollInfo().catch(() => {})
-		}, INFORMATION_POLL_INTERVAL)
+
+		this.#pollTimers.information = setTimeout(() => {
+			this.#pollInfo().catch(() => {})
+		}, POLL_INTERVALS.INFORMATION)
 	}
 
 	updateActions(): void {
