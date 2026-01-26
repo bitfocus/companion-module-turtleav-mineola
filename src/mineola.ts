@@ -168,4 +168,94 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		this.#outputs.master_out_member[value.source] = value.onoff
 		this.emit('outputs')
 	}
+
+	set outputGain(value: { source: number; gain: number }) {
+		if (this.#outputs.output_gain[value.source] == undefined) throw new Error('Output out of range')
+		if (this.#outputs.output_gain[value.source] == value.gain) return
+		this.#outputs.output_gain[value.source] = value.gain
+		this.emit('outputs')
+	}
+
+	set outputLevel(value: { source: number; level: number }) {
+		if (this.#outputs.select_level[value.source] == undefined) throw new Error('Output out of range')
+		if (this.#outputs.select_level[value.source] == value.level) return
+		this.#outputs.select_level[value.source] = value.level
+		this.emit('outputs')
+	}
+
+	set outputDelay(value: { source: number; delay: number }) {
+		if (this.#outputs.output_audio_delay[value.source] == undefined) throw new Error('Output out of range')
+		if (this.#outputs.output_audio_delay[value.source] == value.delay) return
+		this.#outputs.output_audio_delay[value.source] = value.delay
+		this.emit('outputs')
+	}
+
+	set outputMute(value: { source: number; mute: boolean }) {
+		if (this.#outputs.output_volume_mute[value.source] == undefined) throw new Error('Output out of range')
+		if (this.#outputs.output_volume_mute[value.source] == value.mute) return
+		this.#outputs.output_volume_mute[value.source] = value.mute
+		this.emit('outputs')
+	}
+
+	set outputName(value: { source: number; name: string }) {
+		if (this.#outputs.output_name[value.source] == undefined) throw new Error('Output out of range')
+		if (this.#outputs.output_name[value.source] == value.name) return
+		this.#outputs.output_name[value.source] = value.name
+		this.emit('outputs')
+	}
+
+	set presetName(value: { source: number; name: string }) {
+		if (this.#presets.name[value.source] == undefined) throw new Error('Preset out of range')
+		if (this.#presets.name[value.source] == value.name) return
+		this.#presets.name[value.source] = value.name
+		this.emit('presets')
+	}
+	set presetClear(index: number) {
+		if (this.#presets.valid[index] == undefined) throw new Error('Preset out of range')
+		if (this.#presets.valid[index] == false) return
+		this.#presets.valid[index] = false
+		this.emit('presets')
+	}
+
+	set presetSave(index: number) {
+		if (this.#presets.valid[index] == undefined) throw new Error('Preset out of range')
+		if (this.#presets.valid[index] == true) return
+		this.#presets.valid[index] = true
+		this.emit('presets')
+	}
+
+	set inputName(value: { source: number; name: string }) {
+		if (this.#inputs.input_name[value.source] == undefined) throw new Error('Input out of range')
+		if (this.#inputs.input_name[value.source] == value.name) return
+		this.#inputs.input_name[value.source] = value.name
+		this.emit('inputs')
+	}
+
+	set inputGain(value: { source: number; gain: number }) {
+		if (this.#inputs.input_gain[value.source] == undefined) throw new Error('Input out of range')
+		if (this.#inputs.input_gain[value.source] == value.gain) return
+		this.#inputs.input_gain[value.source] = value.gain
+		this.emit('inputs')
+	}
+
+	set inputSensitivity(value: { source: number; sensitivity: number }) {
+		if (this.#inputs.input_sensitivity[value.source] == undefined) throw new Error('Input out of range')
+		if (this.#inputs.input_sensitivity[value.source] == value.sensitivity) return
+		this.#inputs.input_sensitivity[value.source] = value.sensitivity
+		this.emit('inputs')
+	}
+
+	set inputMute(value: { source: number; mute: boolean }) {
+		if (this.#inputs.input_mute[value.source] == undefined) throw new Error('Input out of range')
+		if (this.#inputs.input_mute[value.source] == value.mute) return
+		this.#inputs.input_mute[value.source] = value.mute
+		this.emit('inputs')
+	}
+
+	set inputPhantom(value: { source: number; p48: boolean }) {
+		if (this.#inputs.input_phantom_power[value.source] == undefined) throw new Error('Input out of range')
+		if (this.#inputs.input_phantom_power[value.source] == value.p48) return
+		this.#inputs.input_phantom_power[value.source] = value.p48
+		this.emit('inputs')
+	}
 }

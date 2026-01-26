@@ -4,6 +4,8 @@ The module uses HTTP to control the Mineola
 
 ### Actions
 
+- Output - Master Output Member
+
 - Output Master - Mute
 - Output Master - Volume
 

@@ -68,10 +68,11 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		try {
 			this.createClient(config.host)
 			await this.setupDevice()
-			this.throttledUpdateActionFeedbackDefs()
+			this.updateAllDefs()
 			await this.pollIO()
 			await this.pollPresets()
 			await this.pollInfo()
+			this.checkFeedbacks()
 		} catch (err) {
 			handleError(err, this)
 		}
@@ -152,10 +153,14 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	)
 
 	updateAllDefs(): void {
-		this.updateActions() // export actions
-		this.updateFeedbacks() // export feedbacks
-		this.updateVariableDefinitions() // export variable definitions
-		this.updatePresets()
+		try {
+			this.updateActions() // export actions
+			this.updateFeedbacks() // export feedbacks
+			this.updateVariableDefinitions() // export variable definitions
+			this.updatePresets()
+		} catch (err) {
+			handleError(err, this)
+		}
 	}
 
 	throttledUpdateActionFeedbackDefs = throttle(

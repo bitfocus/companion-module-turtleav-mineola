@@ -1,5 +1,5 @@
 import * as z from 'zod'
-import { SetMessage } from './types.js'
+import { SetMessage, EqTypes } from './types.js'
 
 const BinaryBooleanSchema = z.union([z.literal(0), z.literal(1)]).transform((n) => n === 1)
 
@@ -31,23 +31,18 @@ export type SetOrErrorResponse = z.infer<typeof SetOrErrorResponseSchema>
 /**********************/
 
 const createInputStatusSchema = <T extends 2 | 4 | 8 | 16>(size: T) => {
-	const numberTuple = z.tuple(Array(size).fill(z.number()) as [z.ZodNumber, z.ZodNumber, ...z.ZodNumber[]])
-	const binaryBooleanTuple = z.tuple(
-		Array(size).fill(BinaryBooleanSchema) as [
-			typeof BinaryBooleanSchema,
-			typeof BinaryBooleanSchema,
-			...(typeof BinaryBooleanSchema)[],
-		],
-	)
-	const stringTuple = z.tuple(Array(size).fill(z.string()) as [z.ZodString, z.ZodString, ...z.ZodString[]])
+	const GainArray = z.array(z.number().min(-12).max(12)).length(size)
+	const SensitivityArray = z.array(z.int().min(0).max(5)).length(size)
+	const BinaryBooleanArray = z.array(BinaryBooleanSchema).length(size)
+	const StringArray = z.array(z.string()).length(size)
 
 	return z.object({
 		power: BinaryBooleanSchema,
-		input_gain: numberTuple,
-		input_mute: binaryBooleanTuple,
-		input_sensitivity: numberTuple,
-		input_phantom_power: binaryBooleanTuple,
-		input_name: stringTuple,
+		input_gain: GainArray,
+		input_mute: BinaryBooleanArray,
+		input_sensitivity: SensitivityArray,
+		input_phantom_power: BinaryBooleanArray,
+		input_name: StringArray,
 		comhead: z.literal('get_input_status'),
 	})
 }
@@ -74,27 +69,21 @@ export type InputStatus = z.infer<typeof InputStatusSchema>
 /**********************/
 
 const createOutputStatusSchema = <T extends 2 | 4 | 8 | 16>(size: T) => {
-	const numberTuple = z.tuple(Array(size).fill(z.number()) as [z.ZodNumber, z.ZodNumber, ...z.ZodNumber[]])
-	/* 	const binaryBooleanTuple = z.tuple(
-		Array(size).fill(BinaryBooleanSchema) as [
-			typeof BinaryBooleanSchema,
-			typeof BinaryBooleanSchema,
-			...(typeof BinaryBooleanSchema)[],
-		],
-	) */
+	const GainArray = z.array(z.number().min(-15).max(15)).length(size)
+	const DelayArray = z.array(z.int().min(0).max(50)).length(size)
+	const OutputLevelArray = z.array(z.int().min(0).max(5)).length(size)
+	const StringArray = z.array(z.string()).length(size)
 	const binaryBooleanArray = z.array(BinaryBooleanSchema).length(size)
-	const stringTuple = z.tuple(Array(size).fill(z.string()) as [z.ZodString, z.ZodString, ...z.ZodString[]])
-
 	return z.object({
 		power: BinaryBooleanSchema,
-		output_master_vol_value: z.number(),
+		output_master_vol_value: z.number().int().min(0).max(100),
 		output_master_vol_mute: BinaryBooleanSchema,
 		master_out_member: binaryBooleanArray,
-		output_gain: numberTuple,
+		output_gain: GainArray,
 		output_volume_mute: binaryBooleanArray,
-		output_audio_delay: numberTuple,
-		output_name: stringTuple,
-		select_level: numberTuple,
+		output_audio_delay: DelayArray,
+		output_name: StringArray,
+		select_level: OutputLevelArray,
 		comhead: z.literal('get_output_status'),
 	})
 }
@@ -122,15 +111,9 @@ export type OutputStatus = z.infer<typeof OutputStatusSchema>
 
 export const PresetStatusSchema = z.object({
 	power: BinaryBooleanSchema,
-	valid: z.tuple([
-		BinaryBooleanSchema,
-		BinaryBooleanSchema,
-		BinaryBooleanSchema,
-		BinaryBooleanSchema,
-		BinaryBooleanSchema,
-	]),
-	name: z.tuple([z.string(), z.string(), z.string(), z.string(), z.string()]),
-	o_master_vol_value: z.number(),
+	valid: z.array(BinaryBooleanSchema).length(5),
+	name: z.array(z.string()).length(5),
+	o_master_vol_value: z.int().min(0).max(100),
 	o_master_vol_mute: BinaryBooleanSchema,
 	comhead: z.literal('get_preset_status'),
 })
@@ -163,10 +146,37 @@ export const InformationStatusSchema = z.object({
 	secondary_static_subnet_mask: z.string(),
 	secondary_static_gateway: z.string(),
 	def_hostname: z.string(),
-	output_master_vol_value: z.number(),
+	output_master_vol_value: z.int().min(0).max(100),
 	output_master_vol_mute: BinaryBooleanSchema,
 	comhead: z.literal('get_information_status'),
-	result: z.number(),
+	result: z.int(),
 })
 
 export type InformationStatus = z.infer<typeof InformationStatusSchema>
+
+/**********************/
+/*   ParaEQ Status    */
+/**********************/
+
+const PEQBandSchema = z.object({
+	id: z.int().min(0).max(7),
+	frequency: z.int().min(20).max(20000),
+	gain: z.number().min(-15).max(15),
+	type: z.enum(EqTypes),
+	quality: z.number().min(0.02).max(16),
+	bypass: BinaryBooleanSchema,
+})
+
+export const PEQStatusSchema = z.object({
+	power: BinaryBooleanSchema,
+	chn: z.int(),
+	preset: z.int(),
+	stereo: BinaryBooleanSchema,
+	flat: z.array(PEQBandSchema).length(8),
+	custom1: z.array(PEQBandSchema).length(8),
+	custom2: z.array(PEQBandSchema).length(8),
+	comhead: z.literal('get_peq_status'),
+})
+
+export type PEQStatus = z.infer<typeof PEQStatusSchema>
+export type PEQBand = z.infer<typeof PEQBandSchema>

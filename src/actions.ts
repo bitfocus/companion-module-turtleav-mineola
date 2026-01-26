@@ -90,5 +90,39 @@ export function UpdateActions(self: ModuleInstance): void {
 			if (msg.result == 1 && msg.comhead == 'set_master_volume') self.mineola.outputMasterVolume = value
 		},
 	}
+	actions.outputMasterMute = {
+		name: 'Output - Master Output Member',
+		options: [
+			{
+				type: 'dropdown',
+				id: 'output',
+				label: 'Output',
+				choices: self.mineola.outputChoices,
+				default: self.mineola.outputChoices[0].id ?? 'No valid outputs',
+			},
+			{
+				type: 'dropdown',
+				id: 'state',
+				label: 'State',
+				choices: [
+					{ id: 0, label: 'Off' },
+					{ id: 1, label: 'On' },
+					{ id: 2, label: 'Toggle' },
+				],
+				default: 2,
+				allowCustom: false,
+			},
+		],
+		callback: async (action, _context) => {
+			const out = Number(action.options.output)
+			let state = Number(action.options.state ?? 2)
+			if (state == 2) state = 1 - Number(self.mineola.outputs.master_out_member[out])
+			const response = await self.httpPost({ comhead: 'set_master_out_member', source: out, onoff: state })
+			const msg = SetOrErrorResponseSchema.parse(response.data)
+			if ('error' in msg) throw new Error(msg.error)
+			if (msg.result == 1 && msg.comhead == 'set_master_out_member')
+				self.mineola.outputMasterMember = { source: out, onoff: Boolean(state) }
+		},
+	}
 	self.setActionDefinitions(actions)
 }

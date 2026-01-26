@@ -9,6 +9,7 @@ import {
 import type { ModuleInstance } from './main.js'
 import { MineolaEvents } from './mineola.js'
 import { ChannelOption } from './options.js'
+import { InputSensitivity, OutputLevel } from './types.js'
 
 const defaultStyle = {
 	bgcolor: combineRgb(255, 0, 0),
@@ -166,7 +167,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'Input',
 		self.mineola.inputCount,
 		'inputs',
-		(chan) => self.mineola.inputs.input_sensitivity[chan - 1],
+		(chan) => InputSensitivity[self.mineola.inputs.input_sensitivity[chan - 1]],
 	)
 	feedbacks.inputName = createChannelFeedback(
 		'Input - Name',
@@ -213,6 +214,13 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		self.mineola.outputCount,
 		'outputs',
 		(chan) => self.mineola.outputs.output_name[chan - 1],
+	)
+	feedbacks.outputLevel = createChannelFeedback(
+		'Output - Level',
+		'Output',
+		self.mineola.outputCount,
+		'outputs',
+		(chan) => OutputLevel[self.mineola.outputs.select_level[chan - 1]],
 	)
 
 	// Preset feedbacks
