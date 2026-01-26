@@ -1,5 +1,11 @@
 import { isEqual } from 'es-toolkit'
-import { InputStatusSchema, OutputStatusSchema, PresetStatusSchema, InformationStatusSchema } from './schemas.js'
+import {
+	InputStatusSchema,
+	OutputStatusSchema,
+	PresetStatusSchema,
+	InformationStatusSchema,
+	DSPStatusSchema,
+} from './schemas.js'
 import type { InputStatus, OutputStatus, PresetStatus, InformationStatus } from './schemas.js'
 import { AxiosResponse } from 'axios'
 import EventEmitter from 'events'
@@ -81,7 +87,7 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		this.outputMasterVolume = outs.output_master_vol_value
 		if (isEqual(this.#outputs, outs)) return
 		this.#outputs = outs
-		this.emit('inputs')
+		this.emit('outputs')
 	}
 
 	public set presets(preset: AxiosResponse<any, any>) {
@@ -102,6 +108,13 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		if (isEqual(this.#information, infomation)) return
 		this.#information = infomation
 		this.emit('information')
+	}
+
+	public set dsp(status: AxiosResponse<any, any>) {
+		const dsp = DSPStatusSchema.parse(status.data)
+		this.outputMasterMute = dsp.output_master_vol_mute
+		this.outputMasterVolume = dsp.output_master_vol_value
+		this.power = dsp.power
 	}
 
 	get inputCount(): number {

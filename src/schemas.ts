@@ -69,7 +69,7 @@ export type InputStatus = z.infer<typeof InputStatusSchema>
 /**********************/
 
 const createOutputStatusSchema = <T extends 2 | 4 | 8 | 16>(size: T) => {
-	const GainArray = z.array(z.number().min(-15).max(15)).length(size)
+	const GainArray = z.array(z.number().min(-60).max(15)).length(size)
 	const DelayArray = z.array(z.int().min(0).max(50)).length(size)
 	const OutputLevelArray = z.array(z.int().min(0).max(5)).length(size)
 	const StringArray = z.array(z.string()).length(size)

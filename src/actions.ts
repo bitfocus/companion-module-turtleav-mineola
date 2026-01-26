@@ -529,5 +529,15 @@ export function UpdateActions(self: ModuleInstance): void {
 		},
 	}
 
+	actions.reboot = {
+		name: 'Reboot',
+		options: [],
+		callback: async (_action) => {
+			await sendCommand(self, { comhead: 'set_system_reboot' }, () => {
+				self.log('info', `Device rebooting`)
+			})
+		},
+	}
+
 	self.setActionDefinitions(actions)
 }

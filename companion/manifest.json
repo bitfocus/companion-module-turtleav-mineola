@@ -2,7 +2,7 @@
 	"id": "turtleav-mineola",
 	"name": "turtleav-mineola",
 	"shortname": "Mineola Dante Bridge",
-	"description": "A short one line description of your module",
+	"description": "HTTP control for Turtle AV Mineola Dante bridges",
 	"version": "0.0.0",
 	"license": "MIT",
 	"repository": "git+https://github.com/phillipivan/companion-module-turtleav-mineola.git",

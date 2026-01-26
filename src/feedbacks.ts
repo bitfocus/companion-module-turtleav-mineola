@@ -108,7 +108,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		const base = {
 			name,
 			type,
-			options: [ChannelOption(count)],
+			options: [ChannelOption(count, channelType)],
 			callback: (event: CompanionFeedbackInfo) => {
 				const chan = Number.parseInt(event.options.channel?.toString() ?? '')
 				checkValidNumber(chan, channelType, count)

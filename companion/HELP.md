@@ -9,6 +9,7 @@ This module uses HTTP to control the Turtle AV Mineola audio processor.
 #### Power
 
 - **Power** - Turn the device on/off or toggle
+- **Reboot** - Reboot the device
 
 #### Input Controls
 

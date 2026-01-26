@@ -19,6 +19,8 @@ const POLL_INTERVALS = {
 	INFORMATION: 30000,
 } as const
 
+// const WEBSOCKET_PORT = 41230
+
 type FeedbackCategory = keyof MineolaEvents
 
 export class ModuleInstance extends InstanceBase<ModuleConfig> {
@@ -80,6 +82,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			await this.#setupDevice()
 			this.updateAllDefs()
 			await this.#startPolling()
+			this.subscribeFeedbacks()
 			this.checkFeedbacks()
 		} catch (err) {
 			handleError(err, this)
@@ -195,12 +198,13 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 		try {
 			const shouldPollInputs = this.feedbackSubscriptions.inputs.size > 0
-			const shouldPollOutputs =
-				this.feedbackSubscriptions.outputs.size > 0 ||
-				this.feedbackSubscriptions.power.size > 0 ||
-				this.feedbackSubscriptions.outputMaster.size > 0
-
-			// Fetch both in parallel if needed
+			const shouldPollOutputs = this.feedbackSubscriptions.outputs.size > 0
+			// Power and Output Master data included in both inputs and outputs response, only poll if we don't poll either of those
+			const shouldPollDsp =
+				(this.feedbackSubscriptions.power.size > 0 || this.feedbackSubscriptions.outputMaster.size > 0) &&
+				!shouldPollInputs &&
+				!shouldPollOutputs
+			// Fetch in parallel if needed
 			const requests = []
 			if (shouldPollInputs) {
 				requests.push(
@@ -213,6 +217,13 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				requests.push(
 					this.httpPost({ comhead: 'get_output_status' }).then((outputs) => {
 						this.mineola.outputs = outputs
+					}),
+				)
+			}
+			if (shouldPollDsp) {
+				requests.push(
+					this.httpPost({ comhead: 'get_dsp_status' }).then((dsp) => {
+						this.mineola.dsp = dsp
 					}),
 				)
 			}

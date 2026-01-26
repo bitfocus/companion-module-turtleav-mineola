@@ -6,10 +6,10 @@ export const GetMessage = [
 	'get_preset_status',
 	'get_information_status',
 	'get_peq_status',
-	'get_dsp_status',
-	'get_level',
+	'get_level', // Only supported on websocket
 	'get_system_status',
-	'get_network',
+	'get_dsp_status',
+	'export_data',
 ] as const
 
 export type GetMessage = (typeof GetMessage)[number]
@@ -37,6 +37,12 @@ export const SetMessage = [
 	'set_peq_preset',
 	'set_peq_bypass',
 	'set_peq',
+	'set_standby_mode',
+	'set_auto_standby_time',
+	'set_login_password',
+	'set_logout',
+	'set_login',
+	'set_system_reboot',
 ] as const
 
 export type SetMessage = (typeof SetMessage)[number]
@@ -76,7 +82,6 @@ level 0 - +20dBu
 {"comhead":"set_output_delay","source":0,"delay":50}
 {"comhead":"set_output_mute","source":0,"mute":1}
 
-{"comhead":"set_input_name","source":0,"name":"Ch 1"}
 {"comhead":"set_input_gain","source":0,"gain":-12}
 {"comhead":"set_input_gain","source":0,"gain":2.3}
 {"comhead":"set_input_gain","source":0,"gain":12}
@@ -108,4 +113,36 @@ Gain range -15 to 15
 Q range 0.02 to 16
 {"comhead":"set_peq","chn":0,"preset":1,"id":1,"gain":11.2,"type":"PARAMETRIC","quality":0.02,"bypass":1,"frequency":77}
 {"comhead":"set_peq","chn":0,"preset":1,"id":1,"gain":11.2,"type":"PARAMETRIC","quality":16,"bypass":1,"frequency":77}
+
+{
+	"power": 1,
+	"auto_standby_time": 12,
+	"macaddress": "00:1C:D5:0C:09:0A",
+	"output_master_vol_value": 3,
+	"output_master_vol_mute": 0,
+	"standby_mode": 0,
+	"comhead": "get_system_status"
+}
+
+{
+    "power": 1,
+    "output_master_vol_value": 3,
+    "output_master_vol_mute": 0,
+    "comhead": "get_dsp_status"
+}
+
+{"comhead":"set_standby_mode","mode":1} // sleep
+{"comhead":"set_standby_mode","mode":0} // standby
+
+{"comhead":"set_auto_standby_time","time":0}
+{"comhead":"set_auto_standby_time","time":100}
+
+{"comhead":"set_login_password","username":"Admin","old_pwd":"admin","new_pwd":"1234","confirm_pwd":"1234"}
+
+{"comhead":"set_logout","username":1}
+{"comhead":"set_login","username":"Admin","password":"1234"}
+
+{"comhead":"export_data"}
+
+{"comhead":"set_system_reboot"}
 */
