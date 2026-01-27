@@ -68,6 +68,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	#cleanup(): void {
 		this.#queue.clear()
 		this.#controller.abort()
+		this.#closeWebSocketConnection()
 		Object.values(this.#pollTimers).forEach((timer) => {
 			if (timer) clearTimeout(timer)
 		})
@@ -131,7 +132,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			this.#socket &&
 			(this.#socket.readyState === WebSocket.OPEN || this.#socket.readyState === WebSocket.CONNECTING)
 		) {
-			this.#socket.close(1000, 'Resetting connection')
+			this.#closeWebSocketConnection()
 		}
 		this.debug(`Initialising websocket to ws://${host}:${WEBSOCKET_PORT}/`)
 		this.#socket = new WebSocket(`ws://${host}:${WEBSOCKET_PORT}/`)
@@ -160,6 +161,17 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		10000,
 		{ edges: ['trailing'], signal: this.#controller.signal },
 	)
+
+	#closeWebSocketConnection(): void {
+		if (this.#socket) {
+			this.#socket.terminate()
+			//this.#socket.close(1000, 'Resetting connection')
+			this.#socket.removeAllListeners('open')
+			this.#socket.removeAllListeners('message')
+			this.#socket.removeAllListeners('close')
+			this.#socket.removeAllListeners('error')
+		}
+	}
 
 	public async httpPost(data: HttpMessage, priority: number = 1): Promise<AxiosResponse> {
 		return await this.#queue.add(

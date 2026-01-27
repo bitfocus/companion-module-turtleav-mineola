@@ -1,6 +1,6 @@
 ## Turtle AV Mineola
 
-This module uses HTTP & WebSocket to control the Turtle AV Mineola audio processor.
+This module uses HTTP & WebSockets to control the Turtle AV Mineola audio processor.
 
 ---
 
