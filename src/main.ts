@@ -135,7 +135,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			this.#closeWebSocketConnection()
 		}
 		this.debug(`Initialising websocket to ws://${host}:${WEBSOCKET_PORT}/`)
-		this.#socket = new WebSocket(`ws://${host}:${WEBSOCKET_PORT}/`)
+		this.#socket = new WebSocket(`ws://${host}:${WEBSOCKET_PORT}/`, { signal: this.#controller.signal })
 		this.#socket.addEventListener('open', () => {
 			this.statusManager.updateStatus(InstanceStatus.Ok, `Websocket connected`)
 			this.log('info', `Websocket connected`)
