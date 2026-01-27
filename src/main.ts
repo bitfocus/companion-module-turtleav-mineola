@@ -10,6 +10,7 @@ import { StatusManager } from './status.js'
 import { Mineola, type MineolaEvents } from './mineola.js'
 import type { HttpMessage } from './types.js'
 import axios, { AxiosInstance, AxiosResponse } from 'axios'
+import { WebSocket } from 'ws'
 import PQueue from 'p-queue'
 import { throttle } from 'es-toolkit'
 
@@ -19,13 +20,16 @@ const POLL_INTERVALS = {
 	INFORMATION: 30000,
 } as const
 
-// const WEBSOCKET_PORT = 41230
+const HTTP_TIMEOUT = 1000
+const HTTP_HEADERS = { 'Content-Type': 'application/json' } as const
+const WEBSOCKET_PORT = 41230
 
 type FeedbackCategory = keyof MineolaEvents
 
 export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	#config!: ModuleConfig // Setup in init()
 	#client!: AxiosInstance
+	#socket!: WebSocket
 	#queue = new PQueue({ concurrency: 4 })
 	#controller = new AbortController()
 	public mineola!: Mineola
@@ -37,6 +41,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		information: new Set<string>(),
 		power: new Set<string>(),
 		outputMaster: new Set<string>(),
+		levels: new Set<string>(),
 	}
 	#feedbackIdsToCheck = new Set<string>()
 	#pollTimers = {
@@ -76,16 +81,25 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		// Cleanup old connections
 		this.#cleanup()
 		this.#controller = new AbortController()
+		this.#setupConnection(config.host).catch(() => {})
+	}
 
-		try {
-			this.#createClient(config.host)
-			await this.#setupDevice()
-			this.updateAllDefs()
-			await this.#startPolling()
-			this.subscribeFeedbacks()
-			this.checkFeedbacks()
-		} catch (err) {
-			handleError(err, this)
+	async #setupConnection(host: string): Promise<void> {
+		if (host) {
+			try {
+				this.#createClient(host)
+				await this.#setupDevice()
+				this.#newSocket(host)
+				this.updateAllDefs()
+				void this.#startPolling().then(() => {
+					this.subscribeFeedbacks()
+					this.checkFeedbacks()
+				})
+			} catch (err) {
+				handleError(err, this)
+			}
+		} else {
+			this.statusManager.updateStatus(InstanceStatus.BadConfig, `No host`)
 		}
 	}
 
@@ -107,9 +121,45 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 		this.#client = axios.create({
 			baseURL: `http://${host}/cgi-bin?instr.cgi`,
-			headers: { 'Content-Type': 'application/json' },
+			headers: HTTP_HEADERS,
+			timeout: HTTP_TIMEOUT,
 		})
 	}
+
+	#newSocket(host: string): void {
+		if (
+			this.#socket &&
+			(this.#socket.readyState === WebSocket.OPEN || this.#socket.readyState === WebSocket.CONNECTING)
+		) {
+			this.#socket.close(1000, 'Resetting connection')
+		}
+		this.debug(`Initialising websocket to ws://${host}:${WEBSOCKET_PORT}/`)
+		this.#socket = new WebSocket(`ws://${host}:${WEBSOCKET_PORT}/`)
+		this.#socket.addEventListener('open', () => {
+			this.statusManager.updateStatus(InstanceStatus.Ok, `Websocket connected`)
+			this.log('info', `Websocket connected`)
+		})
+		this.#socket.addEventListener('error', (error) => {
+			handleError(error, this)
+			this.#throttledWebSocketReconnect()
+		})
+		this.#socket.addEventListener('close', (event) => {
+			this.log('info', `WebSocket closed - ${event.code}: ${event.reason}`)
+			this.#throttledWebSocketReconnect()
+		})
+		this.#socket.addEventListener('message', (msg) => {
+			this.debug(`Websocket message received: ${typeof msg.data == 'object' ? JSON.stringify(msg.data) : msg.data}`)
+			this.mineola.WebSocketMessage = msg
+		})
+	}
+
+	#throttledWebSocketReconnect = throttle(
+		() => {
+			this.#newSocket(this.#config.host)
+		},
+		10000,
+		{ edges: ['trailing'], signal: this.#controller.signal },
+	)
 
 	public async httpPost(data: HttpMessage, priority: number = 1): Promise<AxiosResponse> {
 		return await this.#queue.add(

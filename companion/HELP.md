@@ -1,6 +1,6 @@
 ## Turtle AV Mineola
 
-This module uses HTTP to control the Turtle AV Mineola audio processor.
+This module uses HTTP & WebSocket to control the Turtle AV Mineola audio processor.
 
 ---
 
@@ -56,19 +56,22 @@ This module uses HTTP to control the Turtle AV Mineola audio processor.
 
 #### Input Status
 
-- Gain level
+- Gain
 - Mute state
 - Channel name
 - Phantom power state
-- Sensitivity level
+- Sensitivity
+- Signal level
 
 #### Output Status
 
 - Audio delay
-- Gain level
+- Gain
 - Master output membership
 - Mute state
 - Channel name
+- Output level
+- Signal level
 
 #### Output Master Status
 

@@ -176,6 +176,13 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'inputs',
 		(chan) => self.mineola.inputs.input_name[chan - 1],
 	)
+	feedbacks.inputSignalLevel = createChannelFeedback(
+		'Input - Signal Level',
+		'Input',
+		self.mineola.inputCount,
+		'levels',
+		(chan) => Math.round((self.mineola.levelsInput[chan - 1] ?? -200) * 100) / 100, //Round to 2 decimals
+	)
 
 	// Output feedbacks
 	feedbacks.outputMute = createChannelFeedback(
@@ -215,12 +222,19 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		'outputs',
 		(chan) => self.mineola.outputs.output_name[chan - 1],
 	)
-	feedbacks.outputLevel = createChannelFeedback(
-		'Output - Level',
+	feedbacks.outputlLevel = createChannelFeedback(
+		'Output - Output Level',
 		'Output',
 		self.mineola.outputCount,
 		'outputs',
 		(chan) => OutputLevel[self.mineola.outputs.select_level[chan - 1]],
+	)
+	feedbacks.outputSignalLevel = createChannelFeedback(
+		'Output - Signal Level',
+		'Output',
+		self.mineola.outputCount,
+		'levels',
+		(chan) => Math.round((self.mineola.levelsOutput[chan - 1] ?? -200) * 100) / 100, // Round to 2 decimals
 	)
 
 	// Preset feedbacks

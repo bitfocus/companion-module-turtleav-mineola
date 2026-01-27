@@ -249,9 +249,65 @@ export type NetworkStatus = z.infer<typeof NetworkStatusSchema>
 /**********************/
 
 export const LevelStatusSchema = z.object({
-	input_level: z.array(z.number()),
-	output_level: z.array(z.number()),
+	input_level: z.array(z.number().min(-200).max(0)),
+	output_level: z.array(z.number().min(-200).max(0)),
 	comhead: z.literal('get_level'),
 })
 
 export type LevelStatus = z.infer<typeof LevelStatusSchema>
+
+export const WebSocketMessageSchema2 = z.discriminatedUnion('comhead', [
+	LevelStatusSchema,
+	PresetStatusSchema,
+	InformationStatusSchema,
+	PEQStatusSchema,
+	DSPStatusSchema,
+	SystemStatusSchema,
+	NetworkStatusSchema,
+	InputStatusSchema2,
+	OutputStatusSchema2,
+])
+
+export type WebSocketMessage2 = z.infer<typeof WebSocketMessageSchema2>
+
+export const WebSocketMessageSchema4 = z.discriminatedUnion('comhead', [
+	LevelStatusSchema,
+	PresetStatusSchema,
+	InformationStatusSchema,
+	PEQStatusSchema,
+	DSPStatusSchema,
+	SystemStatusSchema,
+	NetworkStatusSchema,
+	InputStatusSchema4,
+	OutputStatusSchema4,
+])
+
+export type WebSocketMessage4 = z.infer<typeof WebSocketMessageSchema4>
+
+export const WebSocketMessageSchema8 = z.discriminatedUnion('comhead', [
+	LevelStatusSchema,
+	PresetStatusSchema,
+	InformationStatusSchema,
+	PEQStatusSchema,
+	DSPStatusSchema,
+	SystemStatusSchema,
+	NetworkStatusSchema,
+	InputStatusSchema8,
+	OutputStatusSchema8,
+])
+
+export type WebSocketMessage8 = z.infer<typeof WebSocketMessageSchema8>
+
+export const WebSocketMessageSchema16 = z.discriminatedUnion('comhead', [
+	LevelStatusSchema,
+	PresetStatusSchema,
+	InformationStatusSchema,
+	PEQStatusSchema,
+	DSPStatusSchema,
+	SystemStatusSchema,
+	NetworkStatusSchema,
+	InputStatusSchema16,
+	OutputStatusSchema16,
+])
+
+export type WebSocketMessage16 = z.infer<typeof WebSocketMessageSchema16>
