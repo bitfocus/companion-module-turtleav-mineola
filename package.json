@@ -24,23 +24,23 @@
 	},
 	"dependencies": {
 		"@companion-module/base": "~1.14.1",
-		"axios": "^1.13.3",
+		"axios": "^1.13.4",
 		"es-toolkit": "^1.44.0",
 		"p-queue": "^9.1.0",
 		"ws": "^8.19.0",
 		"zod": "^4.3.6"
 	},
 	"devDependencies": {
-		"@companion-module/tools": "^2.5.0",
+		"@companion-module/tools": "^2.6.1",
 		"@types/node": "^22.19.7",
-		"@types/ws": "^8",
+		"@types/ws": "^8.18.1",
 		"eslint": "^9.39.2",
 		"husky": "^9.1.7",
 		"lint-staged": "^16.2.7",
 		"prettier": "^3.8.1",
 		"rimraf": "^6.1.2",
 		"typescript": "~5.9.3",
-		"typescript-eslint": "^8.53.1"
+		"typescript-eslint": "^8.54.0"
 	},
 	"prettier": "@companion-module/tools/.prettierrc.json",
 	"lint-staged": {
