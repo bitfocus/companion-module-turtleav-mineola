@@ -16,7 +16,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/phillipivan/companion-module-turtleav-mineola.git"
+		"url": "git+https://github.com/bitfocus/companion-module-turtleav-mineola.git"
 	},
 	"engines": {
 		"node": "^22.20",

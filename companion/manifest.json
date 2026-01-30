@@ -5,8 +5,8 @@
 	"description": "HTTP control for Turtle AV Mineola Dante bridges",
 	"version": "0.0.0",
 	"license": "MIT",
-	"repository": "git+https://github.com/phillipivan/companion-module-turtleav-mineola.git",
-	"bugs": "https://github.com/phillipivan/companion-module-turtleav-mineola/issues",
+	"repository": "git+https://github.com/bitfocus/companion-module-turtleav-mineola.git",
+	"bugs": "https://github.com/bitfocus/companion-module-turtleav-mineola/issues",
 	"maintainers": [
 		{
 			"name": "Phillip Ivan Pietruschka",
