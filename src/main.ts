@@ -178,7 +178,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			async ({ signal }) => {
 				if (!this.#client) throw new Error('Axios Client not initialised')
 
-				const response = await this.#client.post('', data, { signal })
+				const response = await this.#client.post('', data, { signal: signal })
 
 				this.statusManager.updateStatus(InstanceStatus.Ok, response.statusText)
 				this.debug(
