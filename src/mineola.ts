@@ -78,6 +78,7 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 				this.#inputParser = InputStatusSchema4
 				this.#outputParser = OutputStatusSchema4
 				break
+			case 'TAV-PHOENIX88':
 			case 'TAV-MINEOLA88XLR':
 				this.#websocketParser = WebSocketMessageSchema8
 				this.#inputParser = InputStatusSchema8

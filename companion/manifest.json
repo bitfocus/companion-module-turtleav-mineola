@@ -21,6 +21,6 @@
 	},
 	"legacyIds": [],
 	"manufacturer": "Turtle AV",
-	"products": ["Mineola 2x2", "Mineola 4x4", "Mineola 8x8", "Mineola 16x16"],
+	"products": ["Mineola 2x2", "Mineola 4x4", "Mineola 8x8", "Mineola 16x16", "Phoenix 8x8"],
 	"keywords": ["Dante"]
 }
