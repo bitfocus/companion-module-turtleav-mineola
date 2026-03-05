@@ -125,7 +125,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				default: '50',
 				useVariables: { local: true },
 				description: `Range: 0 to 100. When relative is enabled negative values decrease volume`,
-				regex: '/^(100|[1-9]\\d?|\\d|\\$\\(.{3,}\\))$/',
+				regex: '/^(-?(100|[1-9]\\d?|\\d)|-?\\$\\(.+:.+\\))$/',
 			},
 			{
 				type: 'checkbox',
@@ -208,7 +208,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				default: '0',
 				useVariables: { local: true },
 				description: `Range: -60 to 12. When relative is enabled negative values decrease gain`,
-				regex: '/^(-?\\d{1,2}|\\$\\(.{3,}\\))$/',
+				regex: '/^(-?\\d{1,2}|-?\\$\\(.+:.+\\))$/',
 			},
 			{
 				type: 'checkbox',
@@ -248,7 +248,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				default: '0',
 				useVariables: { local: true },
 				description: `Range: 0 to 50. When relative is enabled negative values decrease delay`,
-				regex: '/^(\\d{1,2}|\\$\\(.{3,}\\))$/',
+				regex: '/^(-?\\d{1,2}|-?\\$\\(.+:.+\\))$/',
 			},
 			{
 				type: 'checkbox',
@@ -365,7 +365,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				default: '0',
 				useVariables: { local: true },
 				description: `Range: -12 to 12. When relative is enabled negative values decrease gain`,
-				regex: '/^(-?\\d{1,2}(\\.\\d{1,2})?|\\$\\(.{3,}\\))$/',
+				regex: '/^(-?\\d{1,2}(\\.\\d{1,2})?|-?\\$\\(.+:.+\\))$/',
 			},
 			{
 				type: 'checkbox',
