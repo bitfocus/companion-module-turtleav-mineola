@@ -150,6 +150,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		})
 		this.#socket.addEventListener('message', (msg) => {
 			this.debug(`Websocket message received: ${typeof msg.data == 'object' ? JSON.stringify(msg.data) : msg.data}`)
+			if (!this.mineola) return
 			this.mineola.WebSocketMessage = msg
 		})
 	}
@@ -193,20 +194,16 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	}
 
 	async #setupDevice(): Promise<void> {
-		try {
-			// Fetch all initial state in parallel
-			const [inputs, outputs, presets, info] = await Promise.all([
-				this.httpPost({ comhead: 'get_input_status' }),
-				this.httpPost({ comhead: 'get_output_status' }),
-				this.httpPost({ comhead: 'get_preset_status' }),
-				this.httpPost({ comhead: 'get_information_status' }),
-			])
+		// Fetch all initial state in parallel
+		const [inputs, outputs, presets, info] = await Promise.all([
+			this.httpPost({ comhead: 'get_input_status' }),
+			this.httpPost({ comhead: 'get_output_status' }),
+			this.httpPost({ comhead: 'get_preset_status' }),
+			this.httpPost({ comhead: 'get_information_status' }),
+		])
 
-			this.mineola = Mineola.createMineola(inputs, outputs, presets, info)
-			this.#setupFeedbackEventHandlers()
-		} catch (err) {
-			handleError(err, this)
-		}
+		this.mineola = Mineola.createMineola(inputs, outputs, presets, info)
+		this.#setupFeedbackEventHandlers()
 	}
 
 	#setupFeedbackEventHandlers(): void {
