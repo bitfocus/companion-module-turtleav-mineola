@@ -20,9 +20,21 @@ import {
 } from './schemas.js'
 import type { InputStatus, OutputStatus, PresetStatus, InformationStatus, LevelStatus } from './schemas.js'
 import { AxiosResponse } from 'axios'
+import { ZodError, type ZodType } from 'zod'
 import type { WebSocket } from 'ws'
 import EventEmitter from 'events'
 import { DropdownChoice } from '@companion-module/base'
+import { ZodDataError } from './errors.js'
+
+// Parses with the given schema, wrapping any ZodError with the raw input so callers can log it.
+function parseOrThrow<T>(schema: ZodType<T>, data: unknown): T {
+	try {
+		return schema.parse(data)
+	} catch (err) {
+		if (err instanceof ZodError) throw new ZodDataError(err, data)
+		throw err
+	}
+}
 
 export interface MineolaEvents {
 	inputs: []
@@ -103,10 +115,10 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		presets: AxiosResponse<any, any>,
 		info: AxiosResponse<any, any>,
 	): Mineola {
-		const inputStatus = InputStatusSchema.parse(ins.data)
-		const outputStatus = OutputStatusSchema.parse(outs.data)
-		const presetStatus = PresetStatusSchema.parse(presets.data)
-		const infoStatus = InformationStatusSchema.parse(info.data)
+		const inputStatus = parseOrThrow(InputStatusSchema, ins.data)
+		const outputStatus = parseOrThrow(OutputStatusSchema, outs.data)
+		const presetStatus = parseOrThrow(PresetStatusSchema, presets.data)
+		const infoStatus = parseOrThrow(InformationStatusSchema, info.data)
 
 		return new Mineola(inputStatus, outputStatus, presetStatus, infoStatus)
 	}
@@ -200,27 +212,27 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 
 	// Public setters for HTTP responses
 	public set inputs(inputs: AxiosResponse<any, any>) {
-		const ins = this.#inputParser.parse(inputs.data)
+		const ins = parseOrThrow(this.#inputParser, inputs.data)
 		this.#updateInputs(ins)
 	}
 
 	public set outputs(outputs: AxiosResponse<any, any>) {
-		const outs = this.#outputParser.parse(outputs.data)
+		const outs = parseOrThrow(this.#outputParser, outputs.data)
 		this.#updateOutputs(outs)
 	}
 
 	public set presets(preset: AxiosResponse<any, any>) {
-		const presets = PresetStatusSchema.parse(preset.data)
+		const presets = parseOrThrow(PresetStatusSchema, preset.data)
 		this.#updatePresets(presets)
 	}
 
 	public set info(info: AxiosResponse<any, any>) {
-		const information = InformationStatusSchema.parse(info.data)
+		const information = parseOrThrow(InformationStatusSchema, info.data)
 		this.#updateInformation(information)
 	}
 
 	public set dsp(status: AxiosResponse<any, any>) {
-		const dsp = DSPStatusSchema.parse(status.data)
+		const dsp = parseOrThrow(DSPStatusSchema, status.data)
 		this.outputMasterMute = dsp.output_master_vol_mute
 		this.outputMasterVolume = dsp.output_master_vol_value
 		this.power = dsp.power

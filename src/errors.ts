@@ -3,9 +3,23 @@ import { isAxiosError, AxiosError } from 'axios'
 import { ZodError } from 'zod'
 import type { ModuleInstance } from './main.js'
 
+// Thrown instead of a bare ZodError when the raw payload that failed validation is available,
+// so handleZodError can log it for debugging (plain ZodError does not retain the input).
+export class ZodDataError extends Error {
+	constructor(
+		public readonly zodError: ZodError,
+		public readonly raw: unknown,
+	) {
+		super(zodError.message)
+		this.name = 'ZodDataError'
+	}
+}
+
 export function handleError(err: unknown, instance: ModuleInstance): void {
 	if (isAxiosError(err)) {
 		handleAxiosError(err, instance)
+	} else if (err instanceof ZodDataError) {
+		handleZodError(err.zodError, instance, err.raw)
 	} else if (err instanceof ZodError) {
 		handleZodError(err, instance)
 	} else {
@@ -130,13 +144,14 @@ function handleNetworkError(err: AxiosError, instance: ModuleInstance): void {
 	}
 }
 
-function handleZodError(err: ZodError, instance: ModuleInstance): void {
+function handleZodError(err: ZodError, instance: ModuleInstance, raw?: unknown): void {
 	instance.debug(err)
 
 	// Format Zod errors more readably
 	const formattedErrors = err.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('\n  ')
+	const rawSuffix = raw === undefined ? '' : `\n  Raw data: ${JSON.stringify(raw)}`
 
-	instance.log('warn', `Invalid data returned:\n  ${formattedErrors}`)
+	instance.log('warn', `Invalid data returned:\n  ${formattedErrors}${rawSuffix}`)
 }
 
 function handleUnknownError(err: unknown, instance: ModuleInstance): void {
