@@ -55,15 +55,11 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		| typeof WebSocketMessageSchema8
 		| typeof WebSocketMessageSchema16 = WebSocketMessageSchema2
 	#inputParser:
-		| typeof InputStatusSchema2
-		| typeof InputStatusSchema4
-		| typeof InputStatusSchema8
-		| typeof InputStatusSchema16 = InputStatusSchema2
+		typeof InputStatusSchema2 | typeof InputStatusSchema4 | typeof InputStatusSchema8 | typeof InputStatusSchema16 =
+		InputStatusSchema2
 	#outputParser:
-		| typeof OutputStatusSchema2
-		| typeof OutputStatusSchema4
-		| typeof OutputStatusSchema8
-		| typeof OutputStatusSchema16 = OutputStatusSchema2
+		typeof OutputStatusSchema2 | typeof OutputStatusSchema4 | typeof OutputStatusSchema8 | typeof OutputStatusSchema16 =
+		OutputStatusSchema2
 
 	private constructor(inputs: InputStatus, outputs: OutputStatus, presets: PresetStatus, info: InformationStatus) {
 		super()
