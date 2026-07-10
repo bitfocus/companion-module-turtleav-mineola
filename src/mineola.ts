@@ -72,9 +72,20 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 	#outputParser:
 		typeof OutputStatusSchema2 | typeof OutputStatusSchema4 | typeof OutputStatusSchema8 | typeof OutputStatusSchema16 =
 		OutputStatusSchema2
+	#debug: (msg: string | object) => void
+	#onError: (err: unknown) => void
 
-	private constructor(inputs: InputStatus, outputs: OutputStatus, presets: PresetStatus, info: InformationStatus) {
+	private constructor(
+		inputs: InputStatus,
+		outputs: OutputStatus,
+		presets: PresetStatus,
+		info: InformationStatus,
+		debug: (msg: string | object) => void,
+		onError: (err: unknown) => void,
+	) {
 		super()
+		this.#debug = debug
+		this.#onError = onError
 		switch (info.model_name) {
 			case 'TAV-MINEOLA22XLR':
 				this.#websocketParser = WebSocketMessageSchema2
@@ -114,18 +125,20 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		outs: AxiosResponse<any, any>,
 		presets: AxiosResponse<any, any>,
 		info: AxiosResponse<any, any>,
+		debug: (msg: string | object) => void,
+		onError: (err: unknown) => void,
 	): Mineola {
 		const inputStatus = parseOrThrow(InputStatusSchema, ins.data)
 		const outputStatus = parseOrThrow(OutputStatusSchema, outs.data)
 		const presetStatus = parseOrThrow(PresetStatusSchema, presets.data)
 		const infoStatus = parseOrThrow(InformationStatusSchema, info.data)
 
-		return new Mineola(inputStatus, outputStatus, presetStatus, infoStatus)
+		return new Mineola(inputStatus, outputStatus, presetStatus, infoStatus, debug, onError)
 	}
 
 	public set WebSocketMessage(msg: WebSocket.MessageEvent) {
 		const data = typeof msg.data == 'string' ? JSON.parse(msg.data) : msg.data
-		console.log(typeof data, data)
+		this.#debug({ type: typeof data, data })
 		if (typeof data !== 'object' || Object.keys(data).length == 0) return
 		const result = this.#websocketParser.safeParse(data)
 		if (result.success) {
@@ -155,7 +168,7 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 					break
 
 				case 'get_level':
-					console.log(`updating levels`, status)
+					this.#debug({ event: 'updating levels', status })
 					this.#updatelevels(status)
 					break
 
@@ -165,7 +178,7 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 					break
 			}
 		} else {
-			console.error('Validation failed:', result.error)
+			this.#onError(result.error)
 		}
 	}
 
@@ -205,7 +218,7 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 	}
 
 	#updatelevels(levels: LevelStatus) {
-		console.log(`Update Mineola levels`, levels)
+		this.#debug({ event: 'Update Mineola levels', levels })
 		this.#levels = levels
 		this.emit('levels')
 	}

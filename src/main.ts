@@ -202,7 +202,9 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			this.httpPost({ comhead: 'get_information_status' }),
 		])
 
-		this.mineola = Mineola.createMineola(inputs, outputs, presets, info)
+		this.mineola = Mineola.createMineola(inputs, outputs, presets, info, this.debug.bind(this), (err) =>
+			handleError(err, this),
+		)
 		this.#setupFeedbackEventHandlers()
 	}
 
