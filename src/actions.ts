@@ -1,13 +1,71 @@
-import type {
-	CompanionActionDefinition,
-	CompanionActionDefinitions,
-	CompanionActionEvent,
+import {
+	createModuleLogger,
+	type CompanionActionDefinition,
+	type CompanionActionDefinitions,
+	type DropdownChoice,
 } from '@companion-module/base'
-import type { ModuleInstance } from './main.js'
+import type ModuleInstance from './main.js'
 import { SetOrErrorResponseSchema } from './schemas.js'
 import { ChannelOption } from './options.js'
-import { type ComHeadMessageTypes, type HttpMessage, InputSensitivity, OutputLevel } from './types.js'
+import { type HttpMessage, type SetMessage, InputSensitivity, OutputLevel } from './types.js'
 import { getDropdownChoices } from './utils.js'
+
+const logger = createModuleLogger('Actions')
+
+/**
+ * Action ids. The values are the ids saved against every button using the action, so they must never change —
+ * they predate this enum and are camelCase for that reason.
+ */
+export enum ActionId {
+	Power = 'power',
+	OutputMasterMute = 'outputMasterMute',
+	OutputMasterVolume = 'outputMasterVolume',
+	OutputMasterMember = 'outputMasterMember',
+	OutputMute = 'outputMute',
+	OutputGain = 'outputGain',
+	OutputDelay = 'outputDelay',
+	OutputLevel = 'outputLevel',
+	OutputName = 'outputName',
+	InputMute = 'inputMute',
+	InputPhantom = 'inputPhantom',
+	InputGain = 'inputGain',
+	InputSensitivity = 'inputSensitivity',
+	InputName = 'inputName',
+	PresetName = 'presetName',
+	PresetSave = 'presetSave',
+	PresetClear = 'presetClear',
+	PresetRecall = 'presetRecall',
+	Reboot = 'reboot',
+}
+
+/** 0 = off / on (unmuted), 1 = on / muted, 2 = toggle */
+export type ToggleState = 0 | 1 | 2
+
+type ChannelOptions = { channel: number }
+type ToggleOptions = { state: ToggleState }
+type NameOptions = ChannelOptions & { name: string }
+
+export type ActionSchema = {
+	[ActionId.Power]: { options: ToggleOptions }
+	[ActionId.OutputMasterMute]: { options: ToggleOptions }
+	[ActionId.OutputMasterVolume]: { options: { volume: number; relative: boolean } }
+	[ActionId.OutputMasterMember]: { options: ChannelOptions & ToggleOptions }
+	[ActionId.OutputMute]: { options: ChannelOptions & ToggleOptions }
+	[ActionId.OutputGain]: { options: ChannelOptions & { gain: number; relative: boolean } }
+	[ActionId.OutputDelay]: { options: ChannelOptions & { delay: number; relative: boolean } }
+	[ActionId.OutputLevel]: { options: ChannelOptions & { level: number } }
+	[ActionId.OutputName]: { options: NameOptions }
+	[ActionId.InputMute]: { options: ChannelOptions & ToggleOptions }
+	[ActionId.InputPhantom]: { options: ChannelOptions & ToggleOptions }
+	[ActionId.InputGain]: { options: ChannelOptions & { gain: number; relative: boolean } }
+	[ActionId.InputSensitivity]: { options: ChannelOptions & { sensitivity: number } }
+	[ActionId.InputName]: { options: NameOptions }
+	[ActionId.PresetName]: { options: NameOptions }
+	[ActionId.PresetSave]: { options: ChannelOptions }
+	[ActionId.PresetClear]: { options: ChannelOptions }
+	[ActionId.PresetRecall]: { options: ChannelOptions }
+	[ActionId.Reboot]: { options: Record<string, never> }
+}
 
 function rangeLimitNumber(value: number, min = 0, max = 100): number {
 	if (Number.isNaN(value)) throw new Error('Value is a NaN')
@@ -25,25 +83,46 @@ const STATE_CHOICES = [
 	{ id: 0, label: 'Off' },
 	{ id: 1, label: 'On' },
 	{ id: 2, label: 'Toggle' },
-]
+] as const satisfies DropdownChoice<ToggleState>[]
 
 const MUTE_CHOICES = [
 	{ id: 0, label: 'On' },
 	{ id: 1, label: 'Muted' },
 	{ id: 2, label: 'Toggle' },
-]
+] as const satisfies DropdownChoice<ToggleState>[]
 
-// Generic helpers
-function getChannelFromAction(action: CompanionActionEvent, offset = -1): number {
-	return Number.parseInt(action.options.channel?.toString() ?? '') + offset
+/** Channel options are 1-based for the user, the device and the state arrays are 0-based. */
+function getChannelIndex(options: ChannelOptions, count: number): number {
+	const index = Number(options.channel) - 1
+	checkValidChannel(index, count)
+	return index
 }
 
-function getToggleState(requestedState: number, currentState: boolean): number {
-	return requestedState === 2 ? 1 - Number(currentState) : requestedState
+function getToggleState(requestedState: ToggleState, currentState: boolean): 0 | 1 {
+	if (requestedState === 2) return currentState ? 0 : 1
+	return requestedState
 }
 
-async function sendCommand(self: ModuleInstance, command: HttpMessage, onSuccess?: () => void): Promise<void> {
-	const response = await self.httpPost(command)
+function getRelativeValue(
+	value: number,
+	relative: boolean,
+	currentValue: number,
+	min: number,
+	max: number,
+	isFloat = false,
+): number {
+	let result = isFloat ? Number(value) : Math.trunc(Number(value))
+	if (relative) result += currentValue
+	return rangeLimitNumber(result, min, max)
+}
+
+async function sendCommand(
+	self: ModuleInstance,
+	command: HttpMessage,
+	signal: AbortSignal,
+	onSuccess?: () => void,
+): Promise<void> {
+	const response = await self.httpPost(command, 1, signal)
 	const msg = SetOrErrorResponseSchema.parse(response.data)
 	if ('error' in msg) throw new Error(msg.error)
 	if (msg.result === 1 && msg.comhead === command.comhead && onSuccess) {
@@ -51,495 +130,474 @@ async function sendCommand(self: ModuleInstance, command: HttpMessage, onSuccess
 	}
 }
 
-// Generic relative value handler
-function getRelativeValue(
-	action: any,
-	optionKey: string,
-	currentValue: number,
-	min: number,
-	max: number,
-	isFloat = false,
-): number {
-	const parser = isFloat ? Number.parseFloat : Number.parseInt
-	let value = parser(action.options[optionKey]?.toString() ?? '')
-	if (action.options.relative) value += currentValue
-	return rangeLimitNumber(value, min, max)
-}
-
 export function UpdateActions(self: ModuleInstance): void {
-	const actions: CompanionActionDefinitions = {}
-
-	/**********************/
-	/*        Power       */
-	/**********************/
-	actions.power = {
-		name: 'Power',
-		options: [
-			{
-				type: 'dropdown',
-				id: 'state',
-				label: 'State',
-				choices: STATE_CHOICES,
-				default: 2,
-				allowCustom: false,
-			},
-		],
-		callback: async (action) => {
-			const state = getToggleState(Number(action.options.state ?? 2), self.mineola.power)
-			await sendCommand(self, { comhead: 'set_power', power: state }, () => {
-				self.mineola.power = Boolean(state)
-			})
-		},
-	}
-
-	/**********************/
-	/*    Output Master   */
-	/**********************/
-	actions.outputMasterMute = {
-		name: 'Output Master - Mute',
-		options: [
-			{
-				type: 'dropdown',
-				id: 'state',
-				label: 'State',
-				choices: MUTE_CHOICES,
-				default: 2,
-				allowCustom: false,
-			},
-		],
-		callback: async (action) => {
-			const state = getToggleState(Number(action.options.state ?? 2), self.mineola.outputMasterMute)
-			await sendCommand(self, { comhead: 'set_master_mute', mute: state }, () => {
-				self.mineola.outputMasterMute = Boolean(state)
-			})
-		},
-	}
-
-	actions.outputMasterVolume = {
-		name: 'Output Master - Volume',
-		options: [
-			{
-				type: 'textinput',
-				id: 'volume',
-				label: 'Volume',
-				default: '50',
-				useVariables: { local: true },
-				description: `Range: 0 to 100. When relative is enabled negative values decrease volume`,
-				regex: '/^(-?(100|[1-9]\\d?|\\d)|-?\\$\\(.+:.+\\))$/',
-			},
-			{
-				type: 'checkbox',
-				id: 'relative',
-				label: 'Relative',
-				default: false,
-				description: 'Enable to make a relative volume adjustment',
-			},
-		],
-		callback: async (action) => {
-			const value = getRelativeValue(action, 'volume', self.mineola.outputMasterVolume, 0, 100)
-			await sendCommand(self, { comhead: 'set_master_volume', volume: value }, () => {
-				self.mineola.outputMasterVolume = value
-			})
-		},
-		learn: (action) => ({
-			...action.options,
-			volume: self.mineola.outputMasterVolume,
-			relative: false,
-		}),
-	}
-
-	/**********************/
-	/*       Output       */
-	/**********************/
-	actions.outputMasterMember = {
-		name: 'Output - Master Output Member',
-		options: [
-			ChannelOption(self.mineola.outputCount, 'Output'),
-			{
-				type: 'dropdown',
-				id: 'state',
-				label: 'State',
-				choices: STATE_CHOICES,
-				default: 2,
-				allowCustom: false,
-			},
-		],
-		callback: async (action) => {
-			const out = getChannelFromAction(action)
-			checkValidChannel(out, self.mineola.outputCount)
-			const state = getToggleState(Number(action.options.state ?? 2), self.mineola.outputs.master_out_member[out])
-			await sendCommand(self, { comhead: 'set_master_out_member', source: out, onoff: state }, () => {
-				self.mineola.outputMasterMember = { source: out, onoff: Boolean(state) }
-			})
-		},
-	}
-
-	actions.outputMute = {
-		name: 'Output - Mute',
-		options: [
-			ChannelOption(self.mineola.outputCount, 'Output'),
-			{
-				type: 'dropdown',
-				id: 'state',
-				label: 'State',
-				choices: MUTE_CHOICES,
-				default: 2,
-				allowCustom: false,
-			},
-		],
-		callback: async (action) => {
-			const out = getChannelFromAction(action)
-			checkValidChannel(out, self.mineola.outputCount)
-			const state = getToggleState(Number(action.options.state ?? 2), self.mineola.outputs.output_volume_mute[out])
-			await sendCommand(self, { comhead: 'set_output_mute', source: out, mute: state }, () => {
-				self.mineola.outputMute = { source: out, mute: Boolean(state) }
-			})
-		},
-	}
-
-	actions.outputGain = {
-		name: 'Output - Gain',
-		options: [
-			ChannelOption(self.mineola.outputCount, 'Output'),
-			{
-				type: 'textinput',
-				id: 'gain',
-				label: 'Gain',
-				default: '0',
-				useVariables: { local: true },
-				description: `Range: -60 to 12. When relative is enabled negative values decrease gain`,
-				regex: '/^(-?\\d{1,2}|-?\\$\\(.+:.+\\))$/',
-			},
-			{
-				type: 'checkbox',
-				id: 'relative',
-				label: 'Relative',
-				default: false,
-				description: 'Enable to make a relative gain adjustment',
-			},
-		],
-		callback: async (action) => {
-			const out = getChannelFromAction(action)
-			checkValidChannel(out, self.mineola.outputCount)
-			const value = getRelativeValue(action, 'gain', self.mineola.outputs.output_gain[out], -60, 12, true)
-			await sendCommand(self, { comhead: 'set_output_gain', source: out, gain: value }, () => {
-				self.mineola.outputGain = { source: out, gain: value }
-			})
-		},
-		learn: (action) => {
-			const out = getChannelFromAction(action)
-			checkValidChannel(out, self.mineola.outputCount)
-			return {
-				...action.options,
-				gain: self.mineola.outputs.output_gain[out],
-				relative: false,
-			}
-		},
-	}
-
-	actions.outputDelay = {
-		name: 'Output - Delay',
-		options: [
-			ChannelOption(self.mineola.outputCount, 'Output'),
-			{
-				type: 'textinput',
-				id: 'delay',
-				label: 'Delay (mS)',
-				default: '0',
-				useVariables: { local: true },
-				description: `Range: 0 to 50. When relative is enabled negative values decrease delay`,
-				regex: '/^(-?\\d{1,2}|-?\\$\\(.+:.+\\))$/',
-			},
-			{
-				type: 'checkbox',
-				id: 'relative',
-				label: 'Relative',
-				default: false,
-				description: 'Enable to make a relative delay adjustment',
-			},
-		],
-		callback: async (action) => {
-			const out = getChannelFromAction(action)
-			checkValidChannel(out, self.mineola.outputCount)
-			const value = getRelativeValue(action, 'delay', self.mineola.outputs.output_audio_delay[out], 0, 50)
-			await sendCommand(self, { comhead: 'set_output_delay', source: out, delay: value }, () => {
-				self.mineola.outputDelay = { source: out, delay: value }
-			})
-		},
-		learn: (action) => {
-			const out = getChannelFromAction(action)
-			checkValidChannel(out, self.mineola.outputCount)
-			return {
-				...action.options,
-				delay: self.mineola.outputs.output_audio_delay[out],
-				relative: false,
-			}
-		},
-	}
-
-	actions.outputLevel = {
-		name: 'Output - Level',
-		options: [
-			ChannelOption(self.mineola.outputCount, 'Output'),
-			{
-				type: 'dropdown',
-				id: 'level',
-				label: 'Level',
-				default: 0,
-				choices: getDropdownChoices(OutputLevel),
-			},
-		],
-		callback: async (action) => {
-			const out = getChannelFromAction(action)
-			checkValidChannel(out, self.mineola.outputCount)
-			const value = Number(action.options.level ?? 0)
-			await sendCommand(self, { comhead: 'set_output_level', level: value }, () => {
-				self.mineola.outputLevel = { source: out, level: value }
-			})
-		},
-		learn: (action) => {
-			const out = getChannelFromAction(action)
-			checkValidChannel(out, self.mineola.outputCount)
-			return {
-				...action.options,
-				level: self.mineola.outputs.select_level[out],
-			}
-		},
-	}
-
-	// Similar pattern for input actions...
-	actions.inputMute = {
-		name: 'Input - Mute',
-		options: [
-			ChannelOption(self.mineola.inputCount, 'Input'),
-			{
-				type: 'dropdown',
-				id: 'state',
-				label: 'State',
-				choices: MUTE_CHOICES,
-				default: 2,
-				allowCustom: false,
-			},
-		],
-		callback: async (action) => {
-			const input = getChannelFromAction(action)
-			checkValidChannel(input, self.mineola.inputCount)
-			const state = getToggleState(Number(action.options.state ?? 2), self.mineola.inputs.input_mute[input])
-			await sendCommand(self, { comhead: 'set_input_mute', source: input, mute: state }, () => {
-				self.mineola.inputMute = { source: input, mute: Boolean(state) }
-			})
-		},
-	}
-
-	actions.inputPhantom = {
-		name: 'Input - Phantom Power',
-		options: [
-			ChannelOption(self.mineola.inputCount, 'Input'),
-			{
-				type: 'dropdown',
-				id: 'state',
-				label: 'State',
-				choices: STATE_CHOICES,
-				default: 2,
-				allowCustom: false,
-			},
-		],
-		callback: async (action) => {
-			const input = getChannelFromAction(action)
-			checkValidChannel(input, self.mineola.inputCount)
-			const state = getToggleState(Number(action.options.state ?? 2), self.mineola.inputs.input_phantom_power[input])
-			await sendCommand(self, { comhead: 'set_input_phantom_power', source: input, onoff: state }, () => {
-				self.mineola.inputPhantom = { source: input, p48: Boolean(state) }
-			})
-		},
-	}
-
-	actions.inputGain = {
-		name: 'Input - Gain',
-		options: [
-			ChannelOption(self.mineola.inputCount, 'Input'),
-			{
-				type: 'textinput',
-				id: 'gain',
-				label: 'Gain',
-				default: '0',
-				useVariables: { local: true },
-				description: `Range: -12 to 12. When relative is enabled negative values decrease gain`,
-				regex: '/^(-?\\d{1,2}(\\.\\d{1,2})?|-?\\$\\(.+:.+\\))$/',
-			},
-			{
-				type: 'checkbox',
-				id: 'relative',
-				label: 'Relative',
-				default: false,
-				description: 'Enable to make a relative gain adjustment',
-			},
-		],
-		callback: async (action) => {
-			const input = getChannelFromAction(action)
-			checkValidChannel(input, self.mineola.inputCount)
-			const value = getRelativeValue(action, 'gain', self.mineola.inputs.input_gain[input], -12, 12, true)
-			await sendCommand(self, { comhead: 'set_input_gain', source: input, gain: value }, () => {
-				self.mineola.inputGain = { source: input, gain: value }
-			})
-		},
-		learn: (action) => {
-			const input = getChannelFromAction(action)
-			checkValidChannel(input, self.mineola.inputCount)
-			return {
-				...action.options,
-				gain: self.mineola.inputs.input_gain[input],
-				relative: false,
-			}
-		},
-	}
-
-	actions.inputSensitivity = {
-		name: 'Input - Sensitivity',
-		options: [
-			ChannelOption(self.mineola.inputCount, 'Input'),
-			{
-				type: 'dropdown',
-				id: 'sensitivity',
-				label: 'Sensitivity',
-				default: 0,
-				choices: getDropdownChoices(InputSensitivity),
-			},
-		],
-		callback: async (action) => {
-			const input = getChannelFromAction(action)
-			checkValidChannel(input, self.mineola.inputCount)
-			const value = Number(action.options.sensitivity ?? 0)
-			await sendCommand(self, { comhead: 'set_input_sensitivity', sensitivity: value }, () => {
-				self.mineola.inputSensitivity = { source: input, sensitivity: value }
-			})
-		},
-		learn: (action) => {
-			const input = getChannelFromAction(action)
-			checkValidChannel(input, self.mineola.inputCount)
-			return {
-				...action.options,
-				sensitivity: self.mineola.inputs.input_sensitivity[input],
-			}
-		},
-	}
-
-	// Name setters follow similar pattern
 	const createNameAction = (
 		entityType: 'input' | 'output' | 'preset',
-		comhead: ComHeadMessageTypes,
+		comhead: SetMessage,
 		count: number,
-		nameArray: string[],
-	): CompanionActionDefinition => ({
-		name: `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} - Name`,
-		options: [
-			ChannelOption(count, `${entityType.charAt(0).toUpperCase() + entityType.slice(1)}`),
-			{
-				type: 'textinput',
-				id: 'name',
-				label: 'Name',
-				default: '',
-				description: '32 Characters max',
-				useVariables: { local: true },
-			},
-		],
-		callback: async (action: CompanionActionEvent) => {
-			const index = getChannelFromAction(action)
-			checkValidChannel(index, count)
-			const value = (action.options.name?.toString() ?? '').substring(0, 32)
-			const command: HttpMessage = { comhead: comhead }
-			command.name = value
-			if (entityType === 'preset') {
-				command.index = index
-			} else {
-				command.source = index
-			}
-			await sendCommand(self, command, () => {
-				switch (entityType) {
-					case 'input':
-					case 'output':
-						self.mineola[`${entityType}Name`] = { source: index, name: value }
-						break
-					case 'preset':
-						self.mineola[`${entityType}Name`] = { index: index, name: value }
+		// A getter, not the array: Mineola replaces its whole state object when changed data arrives, and definitions
+		// are only built at connect, so a captured array would go stale
+		getNames: () => readonly string[],
+	): CompanionActionDefinition<ActionSchema[ActionId.InputName]> => {
+		const label = entityType.charAt(0).toUpperCase() + entityType.slice(1)
+		return {
+			name: `${label} - Name`,
+			options: [
+				ChannelOption(count, label),
+				{
+					type: 'textinput',
+					id: 'name',
+					label: 'Name',
+					default: '',
+					description: '32 Characters max',
+					useVariables: true,
+				},
+			],
+			callback: async (action, context) => {
+				const index = getChannelIndex(action.options, count)
+				const value = String(action.options.name).substring(0, 32)
+				const command: HttpMessage = { comhead: comhead }
+				command.name = value
+				if (entityType === 'preset') {
+					command.index = index
+				} else {
+					command.source = index
 				}
-			})
-		},
-		learn: (action: any) => {
-			const index = getChannelFromAction(action)
-			checkValidChannel(index, count)
-			return {
-				...action.options,
-				name: nameArray[index],
-			}
-		},
-	})
-
-	actions.inputName = createNameAction(
-		'input',
-		'set_input_name',
-		self.mineola.inputCount,
-		self.mineola.inputs.input_name,
-	)
-	actions.outputName = createNameAction(
-		'output',
-		'set_output_name',
-		self.mineola.outputCount,
-		self.mineola.outputs.output_name,
-	)
-	actions.presetName = createNameAction(
-		'preset',
-		'set_preset_name',
-		self.mineola.presetCount,
-		self.mineola.presets.name,
-	)
-
-	/**********************/
-	/*       Preset       */
-	/**********************/
-	actions.presetSave = {
-		name: 'Preset - Save',
-		options: [ChannelOption(self.mineola.presetCount, 'Preset')],
-		callback: async (action) => {
-			const preset = getChannelFromAction(action)
-			checkValidChannel(preset, self.mineola.presetCount)
-			await sendCommand(self, { comhead: 'set_save_preset', index: preset }, () => {
-				self.mineola.presetSave = preset
-			})
-		},
+				await sendCommand(self, command, context.signal, () => {
+					switch (entityType) {
+						case 'input':
+						case 'output':
+							self.mineola[`${entityType}Name`] = { source: index, name: value }
+							break
+						case 'preset':
+							self.mineola[`${entityType}Name`] = { index: index, name: value }
+					}
+				})
+			},
+			learn: (action) => {
+				const index = getChannelIndex(action.options, count)
+				return { name: getNames()[index] }
+			},
+		}
 	}
 
-	actions.presetClear = {
-		name: 'Preset - Clear',
-		options: [ChannelOption(self.mineola.presetCount, 'Preset')],
-		callback: async (action) => {
-			const preset = getChannelFromAction(action)
-			checkValidChannel(preset, self.mineola.presetCount)
-			await sendCommand(self, { comhead: 'set_clear_preset', index: preset }, () => {
-				self.mineola.presetClear = preset
-			})
+	const actions: CompanionActionDefinitions<ActionSchema> = {
+		/**********************/
+		/*        Power       */
+		/**********************/
+		[ActionId.Power]: {
+			name: 'Power',
+			options: [
+				{
+					type: 'dropdown',
+					id: 'state',
+					label: 'State',
+					choices: STATE_CHOICES,
+					default: 2,
+					allowCustom: false,
+				},
+			],
+			callback: async (action, context) => {
+				const state = getToggleState(action.options.state, self.mineola.power)
+				await sendCommand(self, { comhead: 'set_power', power: state }, context.signal, () => {
+					self.mineola.power = Boolean(state)
+				})
+			},
 		},
-	}
 
-	actions.presetRecall = {
-		name: 'Preset - Recall',
-		options: [ChannelOption(self.mineola.presetCount, 'Preset')],
-		callback: async (action) => {
-			const preset = getChannelFromAction(action)
-			checkValidChannel(preset, self.mineola.presetCount)
-			await sendCommand(self, { comhead: 'set_recall_preset', index: preset }, () => {
-				self.log('info', `Recalled preset ${preset}: ${self.mineola.presets.name[preset]}`)
-			})
+		/**********************/
+		/*    Output Master   */
+		/**********************/
+		[ActionId.OutputMasterMute]: {
+			name: 'Output Master - Mute',
+			options: [
+				{
+					type: 'dropdown',
+					id: 'state',
+					label: 'State',
+					choices: MUTE_CHOICES,
+					default: 2,
+					allowCustom: false,
+				},
+			],
+			callback: async (action, context) => {
+				const state = getToggleState(action.options.state, self.mineola.outputMasterMute)
+				await sendCommand(self, { comhead: 'set_master_mute', mute: state }, context.signal, () => {
+					self.mineola.outputMasterMute = Boolean(state)
+				})
+			},
 		},
-	}
 
-	actions.reboot = {
-		name: 'Reboot',
-		options: [],
-		callback: async (_action) => {
-			await sendCommand(self, { comhead: 'set_system_reboot' }, () => {
-				self.log('info', `Device rebooting`)
-			})
+		[ActionId.OutputMasterVolume]: {
+			name: 'Output Master - Volume',
+			options: [
+				{
+					type: 'number',
+					id: 'volume',
+					label: 'Volume',
+					default: 50,
+					min: -100,
+					max: 100,
+					asInteger: true,
+					description: `Range: 0 to 100. When relative is enabled negative values decrease volume`,
+				},
+				{
+					type: 'checkbox',
+					id: 'relative',
+					label: 'Relative',
+					default: false,
+					description: 'Enable to make a relative volume adjustment',
+				},
+			],
+			callback: async (action, context) => {
+				const { volume, relative } = action.options
+				const value = getRelativeValue(volume, relative, self.mineola.outputMasterVolume, 0, 100)
+				await sendCommand(self, { comhead: 'set_master_volume', volume: value }, context.signal, () => {
+					self.mineola.outputMasterVolume = value
+				})
+			},
+			learn: () => ({
+				volume: self.mineola.outputMasterVolume,
+				relative: false,
+			}),
+		},
+
+		/**********************/
+		/*       Output       */
+		/**********************/
+		[ActionId.OutputMasterMember]: {
+			name: 'Output - Master Output Member',
+			options: [
+				ChannelOption(self.mineola.outputCount, 'Output'),
+				{
+					type: 'dropdown',
+					id: 'state',
+					label: 'State',
+					choices: STATE_CHOICES,
+					default: 2,
+					allowCustom: false,
+				},
+			],
+			callback: async (action, context) => {
+				const out = getChannelIndex(action.options, self.mineola.outputCount)
+				const state = getToggleState(action.options.state, self.mineola.outputs.master_out_member[out])
+				await sendCommand(self, { comhead: 'set_master_out_member', source: out, onoff: state }, context.signal, () => {
+					self.mineola.outputMasterMember = { source: out, onoff: Boolean(state) }
+				})
+			},
+		},
+
+		[ActionId.OutputMute]: {
+			name: 'Output - Mute',
+			options: [
+				ChannelOption(self.mineola.outputCount, 'Output'),
+				{
+					type: 'dropdown',
+					id: 'state',
+					label: 'State',
+					choices: MUTE_CHOICES,
+					default: 2,
+					allowCustom: false,
+				},
+			],
+			callback: async (action, context) => {
+				const out = getChannelIndex(action.options, self.mineola.outputCount)
+				const state = getToggleState(action.options.state, self.mineola.outputs.output_volume_mute[out])
+				await sendCommand(self, { comhead: 'set_output_mute', source: out, mute: state }, context.signal, () => {
+					self.mineola.outputMute = { source: out, mute: Boolean(state) }
+				})
+			},
+		},
+
+		[ActionId.OutputGain]: {
+			name: 'Output - Gain',
+			options: [
+				ChannelOption(self.mineola.outputCount, 'Output'),
+				{
+					type: 'number',
+					id: 'gain',
+					label: 'Gain',
+					default: 0,
+					min: -72,
+					max: 72,
+					description: `Range: -60 to 12. When relative is enabled negative values decrease gain`,
+				},
+				{
+					type: 'checkbox',
+					id: 'relative',
+					label: 'Relative',
+					default: false,
+					description: 'Enable to make a relative gain adjustment',
+				},
+			],
+			callback: async (action, context) => {
+				const out = getChannelIndex(action.options, self.mineola.outputCount)
+				const { gain, relative } = action.options
+				const value = getRelativeValue(gain, relative, self.mineola.outputs.output_gain[out], -60, 12, true)
+				await sendCommand(self, { comhead: 'set_output_gain', source: out, gain: value }, context.signal, () => {
+					self.mineola.outputGain = { source: out, gain: value }
+				})
+			},
+			learn: (action) => {
+				const out = getChannelIndex(action.options, self.mineola.outputCount)
+				return {
+					gain: self.mineola.outputs.output_gain[out],
+					relative: false,
+				}
+			},
+		},
+
+		[ActionId.OutputDelay]: {
+			name: 'Output - Delay',
+			options: [
+				ChannelOption(self.mineola.outputCount, 'Output'),
+				{
+					type: 'number',
+					id: 'delay',
+					label: 'Delay (mS)',
+					default: 0,
+					min: -50,
+					max: 50,
+					asInteger: true,
+					description: `Range: 0 to 50. When relative is enabled negative values decrease delay`,
+				},
+				{
+					type: 'checkbox',
+					id: 'relative',
+					label: 'Relative',
+					default: false,
+					description: 'Enable to make a relative delay adjustment',
+				},
+			],
+			callback: async (action, context) => {
+				const out = getChannelIndex(action.options, self.mineola.outputCount)
+				const { delay, relative } = action.options
+				const value = getRelativeValue(delay, relative, self.mineola.outputs.output_audio_delay[out], 0, 50)
+				await sendCommand(self, { comhead: 'set_output_delay', source: out, delay: value }, context.signal, () => {
+					self.mineola.outputDelay = { source: out, delay: value }
+				})
+			},
+			learn: (action) => {
+				const out = getChannelIndex(action.options, self.mineola.outputCount)
+				return {
+					delay: self.mineola.outputs.output_audio_delay[out],
+					relative: false,
+				}
+			},
+		},
+
+		[ActionId.OutputLevel]: {
+			name: 'Output - Level',
+			options: [
+				ChannelOption(self.mineola.outputCount, 'Output'),
+				{
+					type: 'dropdown',
+					id: 'level',
+					label: 'Level',
+					default: 0,
+					choices: getDropdownChoices(OutputLevel),
+				},
+			],
+			callback: async (action, context) => {
+				const out = getChannelIndex(action.options, self.mineola.outputCount)
+				const value = Number(action.options.level)
+				await sendCommand(self, { comhead: 'set_output_level', level: value }, context.signal, () => {
+					self.mineola.outputLevel = { source: out, level: value }
+				})
+			},
+			learn: (action) => {
+				const out = getChannelIndex(action.options, self.mineola.outputCount)
+				return {
+					level: self.mineola.outputs.select_level[out],
+				}
+			},
+		},
+
+		[ActionId.OutputName]: createNameAction(
+			'output',
+			'set_output_name',
+			self.mineola.outputCount,
+			() => self.mineola.outputs.output_name,
+		),
+
+		/**********************/
+		/*        Input       */
+		/**********************/
+		[ActionId.InputMute]: {
+			name: 'Input - Mute',
+			options: [
+				ChannelOption(self.mineola.inputCount, 'Input'),
+				{
+					type: 'dropdown',
+					id: 'state',
+					label: 'State',
+					choices: MUTE_CHOICES,
+					default: 2,
+					allowCustom: false,
+				},
+			],
+			callback: async (action, context) => {
+				const input = getChannelIndex(action.options, self.mineola.inputCount)
+				const state = getToggleState(action.options.state, self.mineola.inputs.input_mute[input])
+				await sendCommand(self, { comhead: 'set_input_mute', source: input, mute: state }, context.signal, () => {
+					self.mineola.inputMute = { source: input, mute: Boolean(state) }
+				})
+			},
+		},
+
+		[ActionId.InputPhantom]: {
+			name: 'Input - Phantom Power',
+			options: [
+				ChannelOption(self.mineola.inputCount, 'Input'),
+				{
+					type: 'dropdown',
+					id: 'state',
+					label: 'State',
+					choices: STATE_CHOICES,
+					default: 2,
+					allowCustom: false,
+				},
+			],
+			callback: async (action, context) => {
+				const input = getChannelIndex(action.options, self.mineola.inputCount)
+				const state = getToggleState(action.options.state, self.mineola.inputs.input_phantom_power[input])
+				await sendCommand(
+					self,
+					{ comhead: 'set_input_phantom_power', source: input, onoff: state },
+					context.signal,
+					() => {
+						self.mineola.inputPhantom = { source: input, p48: Boolean(state) }
+					},
+				)
+			},
+		},
+
+		[ActionId.InputGain]: {
+			name: 'Input - Gain',
+			options: [
+				ChannelOption(self.mineola.inputCount, 'Input'),
+				{
+					type: 'number',
+					id: 'gain',
+					label: 'Gain',
+					default: 0,
+					min: -24,
+					max: 24,
+					description: `Range: -12 to 12. When relative is enabled negative values decrease gain`,
+				},
+				{
+					type: 'checkbox',
+					id: 'relative',
+					label: 'Relative',
+					default: false,
+					description: 'Enable to make a relative gain adjustment',
+				},
+			],
+			callback: async (action, context) => {
+				const input = getChannelIndex(action.options, self.mineola.inputCount)
+				const { gain, relative } = action.options
+				const value = getRelativeValue(gain, relative, self.mineola.inputs.input_gain[input], -12, 12, true)
+				await sendCommand(self, { comhead: 'set_input_gain', source: input, gain: value }, context.signal, () => {
+					self.mineola.inputGain = { source: input, gain: value }
+				})
+			},
+			learn: (action) => {
+				const input = getChannelIndex(action.options, self.mineola.inputCount)
+				return {
+					gain: self.mineola.inputs.input_gain[input],
+					relative: false,
+				}
+			},
+		},
+
+		[ActionId.InputSensitivity]: {
+			name: 'Input - Sensitivity',
+			options: [
+				ChannelOption(self.mineola.inputCount, 'Input'),
+				{
+					type: 'dropdown',
+					id: 'sensitivity',
+					label: 'Sensitivity',
+					default: 0,
+					choices: getDropdownChoices(InputSensitivity),
+				},
+			],
+			callback: async (action, context) => {
+				const input = getChannelIndex(action.options, self.mineola.inputCount)
+				const value = Number(action.options.sensitivity)
+				await sendCommand(self, { comhead: 'set_input_sensitivity', sensitivity: value }, context.signal, () => {
+					self.mineola.inputSensitivity = { source: input, sensitivity: value }
+				})
+			},
+			learn: (action) => {
+				const input = getChannelIndex(action.options, self.mineola.inputCount)
+				return {
+					sensitivity: self.mineola.inputs.input_sensitivity[input],
+				}
+			},
+		},
+
+		[ActionId.InputName]: createNameAction(
+			'input',
+			'set_input_name',
+			self.mineola.inputCount,
+			() => self.mineola.inputs.input_name,
+		),
+
+		/**********************/
+		/*       Preset       */
+		/**********************/
+		[ActionId.PresetName]: createNameAction(
+			'preset',
+			'set_preset_name',
+			self.mineola.presetCount,
+			() => self.mineola.presets.name,
+		),
+
+		[ActionId.PresetSave]: {
+			name: 'Preset - Save',
+			options: [ChannelOption(self.mineola.presetCount, 'Preset')],
+			callback: async (action, context) => {
+				const preset = getChannelIndex(action.options, self.mineola.presetCount)
+				await sendCommand(self, { comhead: 'set_save_preset', index: preset }, context.signal, () => {
+					self.mineola.presetSave = preset
+				})
+			},
+		},
+
+		[ActionId.PresetClear]: {
+			name: 'Preset - Clear',
+			options: [ChannelOption(self.mineola.presetCount, 'Preset')],
+			callback: async (action, context) => {
+				const preset = getChannelIndex(action.options, self.mineola.presetCount)
+				await sendCommand(self, { comhead: 'set_clear_preset', index: preset }, context.signal, () => {
+					self.mineola.presetClear = preset
+				})
+			},
+		},
+
+		[ActionId.PresetRecall]: {
+			name: 'Preset - Recall',
+			options: [ChannelOption(self.mineola.presetCount, 'Preset')],
+			callback: async (action, context) => {
+				const preset = getChannelIndex(action.options, self.mineola.presetCount)
+				await sendCommand(self, { comhead: 'set_recall_preset', index: preset }, context.signal, () => {
+					logger.info(`Recalled preset ${preset}: ${self.mineola.presets.name[preset]}`)
+				})
+			},
+		},
+
+		/**********************/
+		/*       System       */
+		/**********************/
+		[ActionId.Reboot]: {
+			name: 'Reboot',
+			options: [],
+			callback: async (_action, context) => {
+				await sendCommand(self, { comhead: 'set_system_reboot' }, context.signal, () => {
+					logger.info(`Device rebooting`)
+				})
+			},
 		},
 	}
 

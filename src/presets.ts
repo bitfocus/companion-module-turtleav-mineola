@@ -1,8 +1,5 @@
-import type { ModuleInstance } from './main.js'
-import type { CompanionPresetDefinitions } from '@companion-module/base'
+import type ModuleInstance from './main.js'
 
 export function UpdatePresets(self: ModuleInstance): void {
-	const presets: CompanionPresetDefinitions = {}
-
-	self.setPresetDefinitions(presets)
+	self.setPresetDefinitions([], {})
 }

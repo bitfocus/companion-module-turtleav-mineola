@@ -1,7 +1,9 @@
 {
+	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
+	"type": "connection",
 	"id": "turtleav-mineola",
-	"name": "turtleav-mineola",
-	"shortname": "Mineola Dante Bridge",
+	"name": "Mineola Dante Bridge",
+	"shortname": "Mineola",
 	"description": "HTTP control for Turtle AV Mineola Dante bridges",
 	"version": "0.0.0",
 	"license": "MIT",
@@ -14,7 +16,7 @@
 		}
 	],
 	"runtime": {
-		"type": "node22",
+		"type": "node26",
 		"api": "nodejs-ipc",
 		"apiVersion": "0.0.0",
 		"entrypoint": "../dist/main.js"

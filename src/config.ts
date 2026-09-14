@@ -1,6 +1,7 @@
 import { Regex, type SomeCompanionConfigField } from '@companion-module/base'
 
-export interface ModuleConfig {
+// A type alias, not an interface: InstanceTypes requires config to satisfy JsonObject, and interfaces don't
+export type ModuleConfig = {
 	host: string
 	verbose: boolean
 }

@@ -1,297 +1,347 @@
 import {
 	combineRgb,
-	type CompanionFeedbackInfo,
-	type CompanionFeedbackContext,
 	type CompanionBooleanFeedbackDefinition,
-	type CompanionFeedbackDefinition,
+	type CompanionFeedbackDefinitions,
+	type CompanionFeedbackInfo,
 	type CompanionValueFeedbackDefinition,
+	type JsonValue,
 } from '@companion-module/base'
-import type { ModuleInstance } from './main.js'
-import { MineolaEvents } from './mineola.js'
+import type ModuleInstance from './main.js'
+import type { MineolaEvents } from './mineola.js'
 import { ChannelOption } from './options.js'
 import { InputSensitivity, OutputLevel } from './types.js'
+
+/**
+ * Feedback ids. The values are the ids saved against every button using the feedback, so they must never change —
+ * they predate this enum, which is why two of them carry typos.
+ */
+export enum FeedbackId {
+	Power = 'power',
+	OutputMasterMute = 'outputMasterMute',
+	OutputMasterVolume = 'outputMasterVolume',
+	InputMute = 'inputMute',
+	InputP48 = 'inputP48',
+	InputGain = 'inputGain',
+	InputSensitivity = 'inputSensitivity',
+	InputName = 'inputName',
+	InputSignalLevel = 'inputSignalLevel',
+	OutputMute = 'outputMute',
+	OutputMasterOutMember = 'outputMasterOutMember',
+	OutputGain = 'outputGain',
+	OutputDelay = 'outputDelay',
+	OutputName = 'outputName',
+	OutputLevel = 'outputlLevel',
+	OutputSignalLevel = 'outputSignalLevel',
+	PresetValid = 'presetValid',
+	PresetName = 'presetName',
+	InfoModel = 'infoModel',
+	InfoVersion = 'infoVersion',
+	InfoMcuVersion = 'infoMcuVersion',
+	InfoDepSdk = 'infodepsdk',
+	InfoHostName = 'infoHostName',
+	InfoMacPrimary = 'infoMacPri',
+	InfoMacSecondary = 'infoMacSec',
+	InfoIpPrimary = 'infoIpPri',
+	InfoIpSecondary = 'infoIpSec',
+}
+
+type NoOptions = Record<string, never>
+type ChannelOptions = { channel: number }
+type BooleanFeedback<TOptions> = { type: 'boolean'; options: TOptions }
+type ValueFeedback<TOptions> = { type: 'value'; options: TOptions }
+
+export type FeedbackSchema = {
+	[FeedbackId.Power]: BooleanFeedback<NoOptions>
+	[FeedbackId.OutputMasterMute]: BooleanFeedback<NoOptions>
+	[FeedbackId.OutputMasterVolume]: ValueFeedback<NoOptions>
+	[FeedbackId.InputMute]: BooleanFeedback<ChannelOptions>
+	[FeedbackId.InputP48]: BooleanFeedback<ChannelOptions>
+	[FeedbackId.InputGain]: ValueFeedback<ChannelOptions>
+	[FeedbackId.InputSensitivity]: ValueFeedback<ChannelOptions>
+	[FeedbackId.InputName]: ValueFeedback<ChannelOptions>
+	[FeedbackId.InputSignalLevel]: ValueFeedback<ChannelOptions>
+	[FeedbackId.OutputMute]: BooleanFeedback<ChannelOptions>
+	[FeedbackId.OutputMasterOutMember]: BooleanFeedback<ChannelOptions>
+	[FeedbackId.OutputGain]: ValueFeedback<ChannelOptions>
+	[FeedbackId.OutputDelay]: ValueFeedback<ChannelOptions>
+	[FeedbackId.OutputName]: ValueFeedback<ChannelOptions>
+	[FeedbackId.OutputLevel]: ValueFeedback<ChannelOptions>
+	[FeedbackId.OutputSignalLevel]: ValueFeedback<ChannelOptions>
+	[FeedbackId.PresetValid]: BooleanFeedback<ChannelOptions>
+	[FeedbackId.PresetName]: ValueFeedback<ChannelOptions>
+	[FeedbackId.InfoModel]: ValueFeedback<NoOptions>
+	[FeedbackId.InfoVersion]: ValueFeedback<NoOptions>
+	[FeedbackId.InfoMcuVersion]: ValueFeedback<NoOptions>
+	[FeedbackId.InfoDepSdk]: ValueFeedback<NoOptions>
+	[FeedbackId.InfoHostName]: ValueFeedback<NoOptions>
+	[FeedbackId.InfoMacPrimary]: ValueFeedback<NoOptions>
+	[FeedbackId.InfoMacSecondary]: ValueFeedback<NoOptions>
+	[FeedbackId.InfoIpPrimary]: ValueFeedback<NoOptions>
+	[FeedbackId.InfoIpSecondary]: ValueFeedback<NoOptions>
+}
+
+type SubscriptionKey = keyof MineolaEvents
+type ChannelType = 'Input' | 'Output' | 'Preset'
 
 const defaultStyle = {
 	bgcolor: combineRgb(255, 0, 0),
 	color: combineRgb(0, 0, 0),
 }
 
-const feedbackSubscribe =
-	(instance: ModuleInstance, types: Array<keyof typeof instance.feedbackSubscriptions>) =>
-	(feedback: CompanionFeedbackInfo, _context: CompanionFeedbackContext): void => {
-		types.forEach((type) => {
-			instance.feedbackSubscriptions[type].add(feedback.id)
-		})
-	}
+/**
+ * Registers the feedback against the data it reads. Polling only fetches data something is subscribed to.
+ * API 2.x removed the feedback `subscribe` hook, so this runs from inside `callback` — a feedback being evaluated
+ * is one in use, and re-registering on every check means it can't drift out of the set while still on a button.
+ */
+function feedbackSubscribe(self: ModuleInstance, key: SubscriptionKey, feedback: CompanionFeedbackInfo): void {
+	self.feedbackSubscriptions[key].add(feedback.id)
+}
 
 const feedbackUnsubscribe =
-	(instance: ModuleInstance, types: Array<keyof typeof instance.feedbackSubscriptions>) =>
-	(feedback: CompanionFeedbackInfo, _context: CompanionFeedbackContext): void => {
-		types.forEach((type) => {
-			instance.feedbackSubscriptions[type].delete(feedback.id)
-		})
+	(self: ModuleInstance, key: SubscriptionKey) =>
+	(feedback: CompanionFeedbackInfo): void => {
+		self.feedbackSubscriptions[key].delete(feedback.id)
 	}
 
-const checkValidNumber = (value: number, name = 'channel', max = 8, min = 1): void => {
-	if (Number.isNaN(value)) throw new Error(`${name} is a NaN`)
-	if (value < min) throw new Error(`${name} is a out of range (below ${min}): ${value}`)
-	if (value > max) throw new Error(`${name} is a out of range (above ${max}): ${value}`)
+/** Validates a 1-based channel option and returns the 0-based index into the state arrays. */
+function getChannelIndex(options: ChannelOptions, name: ChannelType, count: number): number {
+	const channel = Number(options.channel)
+	if (Number.isNaN(channel)) throw new Error(`${name} is a NaN`)
+	if (channel < 1) throw new Error(`${name} is a out of range (below 1): ${channel}`)
+	if (channel > count) throw new Error(`${name} is a out of range (above ${count}): ${channel}`)
+	return channel - 1
 }
 
 export function UpdateFeedbacks(self: ModuleInstance): void {
-	const feedbacks: Record<string, CompanionFeedbackDefinition> = {}
-
-	// Factory for simple value feedbacks without channels
-	// Option 1: Function overloads
-	function createSimpleFeedback(
+	const simpleBoolean = (
 		name: string,
-		subscriptionKey: keyof MineolaEvents,
+		key: SubscriptionKey,
 		getValue: () => boolean,
+	): CompanionBooleanFeedbackDefinition<NoOptions> => ({
 		type: 'boolean',
-	): CompanionBooleanFeedbackDefinition
+		name,
+		defaultStyle,
+		options: [],
+		callback: (feedback) => {
+			feedbackSubscribe(self, key, feedback)
+			return getValue()
+		},
+		unsubscribe: feedbackUnsubscribe(self, key),
+	})
 
-	function createSimpleFeedback(
+	const simpleValue = (
 		name: string,
-		subscriptionKey: keyof MineolaEvents,
-		getValue: () => any,
-		type?: 'value',
-	): CompanionValueFeedbackDefinition
+		key: SubscriptionKey,
+		getValue: () => JsonValue,
+	): CompanionValueFeedbackDefinition<NoOptions> => ({
+		type: 'value',
+		name,
+		options: [],
+		callback: (feedback) => {
+			feedbackSubscribe(self, key, feedback)
+			return getValue()
+		},
+		unsubscribe: feedbackUnsubscribe(self, key),
+	})
 
-	function createSimpleFeedback(
+	const channelBoolean = (
 		name: string,
-		subscriptionKey: keyof MineolaEvents,
-		getValue: () => any,
-		type: 'boolean' | 'value' = 'value',
-	): CompanionFeedbackDefinition {
-		const base = {
-			name,
-			type,
-			options: [],
-			callback: getValue,
-			subscribe: feedbackSubscribe(self, [subscriptionKey]),
-			unsubscribe: feedbackUnsubscribe(self, [subscriptionKey]),
-		}
-
-		if (type === 'boolean') {
-			return { ...base, type: 'boolean' as const, defaultStyle }
-		}
-		return { ...base, type: 'value' as const }
-	}
-
-	// Do the same for createChannelFeedback
-	function createChannelFeedback(
-		name: string,
-		channelType: 'Input' | 'Output' | 'Preset',
+		channelType: ChannelType,
 		count: number,
-		subscriptionKey: keyof MineolaEvents,
-		getValue: (chan: number) => boolean,
+		key: SubscriptionKey,
+		getValue: (index: number) => boolean,
+	): CompanionBooleanFeedbackDefinition<ChannelOptions> => ({
 		type: 'boolean',
-	): CompanionBooleanFeedbackDefinition
+		name,
+		defaultStyle,
+		options: [ChannelOption(count, channelType)],
+		callback: (feedback) => {
+			// Subscribe before validating, so a feedback with a bad channel still keeps its data polled
+			feedbackSubscribe(self, key, feedback)
+			return getValue(getChannelIndex(feedback.options, channelType, count))
+		},
+		unsubscribe: feedbackUnsubscribe(self, key),
+	})
 
-	function createChannelFeedback(
+	const channelValue = (
 		name: string,
-		channelType: 'Input' | 'Output' | 'Preset',
+		channelType: ChannelType,
 		count: number,
-		subscriptionKey: keyof MineolaEvents,
-		getValue: (chan: number) => any,
-		type?: 'value',
-	): CompanionValueFeedbackDefinition
+		key: SubscriptionKey,
+		getValue: (index: number) => JsonValue,
+	): CompanionValueFeedbackDefinition<ChannelOptions> => ({
+		type: 'value',
+		name,
+		options: [ChannelOption(count, channelType)],
+		callback: (feedback) => {
+			feedbackSubscribe(self, key, feedback)
+			return getValue(getChannelIndex(feedback.options, channelType, count))
+		},
+		unsubscribe: feedbackUnsubscribe(self, key),
+	})
 
-	function createChannelFeedback(
-		name: string,
-		channelType: 'Input' | 'Output' | 'Preset',
-		count: number,
-		subscriptionKey: keyof MineolaEvents,
-		getValue: (chan: number) => any,
-		type: 'boolean' | 'value' = 'value',
-	): CompanionFeedbackDefinition {
-		const base = {
-			name,
-			type,
-			options: [ChannelOption(count, channelType)],
-			callback: (event: CompanionFeedbackInfo) => {
-				const chan = Number.parseInt(event.options.channel?.toString() ?? '')
-				checkValidNumber(chan, channelType, count)
-				return getValue(chan)
-			},
-			subscribe: feedbackSubscribe(self, [subscriptionKey]),
-			unsubscribe: feedbackUnsubscribe(self, [subscriptionKey]),
-		}
+	const { inputCount, outputCount, presetCount } = self.mineola
 
-		if (type === 'boolean') {
-			return { ...base, type: 'boolean' as const, defaultStyle }
-		}
-		return { ...base, type: 'value' as const }
+	const feedbacks: CompanionFeedbackDefinitions<FeedbackSchema> = {
+		// Power & Output Master
+		[FeedbackId.Power]: simpleBoolean('Power', 'power', () => self.mineola.power),
+		[FeedbackId.OutputMasterMute]: simpleBoolean(
+			'Output Master - Mute',
+			'outputMaster',
+			() => self.mineola.outputMasterMute,
+		),
+		[FeedbackId.OutputMasterVolume]: simpleValue(
+			'Output Master - Volume',
+			'outputMaster',
+			() => self.mineola.outputMasterVolume,
+		),
+
+		// Input
+		[FeedbackId.InputMute]: channelBoolean(
+			'Input - Mute',
+			'Input',
+			inputCount,
+			'inputs',
+			(i) => self.mineola.inputs.input_mute[i],
+		),
+		[FeedbackId.InputP48]: channelBoolean(
+			'Input - Phantom Power',
+			'Input',
+			inputCount,
+			'inputs',
+			(i) => self.mineola.inputs.input_phantom_power[i],
+		),
+		[FeedbackId.InputGain]: channelValue(
+			'Input - Gain',
+			'Input',
+			inputCount,
+			'inputs',
+			(i) => self.mineola.inputs.input_gain[i],
+		),
+		[FeedbackId.InputSensitivity]: channelValue(
+			'Input - Sensitivity',
+			'Input',
+			inputCount,
+			'inputs',
+			(i) => InputSensitivity[self.mineola.inputs.input_sensitivity[i]],
+		),
+		[FeedbackId.InputName]: channelValue(
+			'Input - Name',
+			'Input',
+			inputCount,
+			'inputs',
+			(i) => self.mineola.inputs.input_name[i],
+		),
+		[FeedbackId.InputSignalLevel]: channelValue(
+			'Input - Signal Level',
+			'Input',
+			inputCount,
+			'levels',
+			(i) => Math.round((self.mineola.levelsInput[i] ?? -200) * 100) / 100, // Round to 2 decimals
+		),
+
+		// Output
+		[FeedbackId.OutputMute]: channelBoolean(
+			'Output - Mute',
+			'Output',
+			outputCount,
+			'outputs',
+			(i) => self.mineola.outputs.output_volume_mute[i],
+		),
+		[FeedbackId.OutputMasterOutMember]: channelBoolean(
+			'Output - Master Output Member',
+			'Output',
+			outputCount,
+			'outputs',
+			(i) => self.mineola.outputs.master_out_member[i],
+		),
+		[FeedbackId.OutputGain]: channelValue(
+			'Output - Gain',
+			'Output',
+			outputCount,
+			'outputs',
+			(i) => self.mineola.outputs.output_gain[i],
+		),
+		[FeedbackId.OutputDelay]: channelValue(
+			'Output - Delay',
+			'Output',
+			outputCount,
+			'outputs',
+			(i) => self.mineola.outputs.output_audio_delay[i],
+		),
+		[FeedbackId.OutputName]: channelValue(
+			'Output - Name',
+			'Output',
+			outputCount,
+			'outputs',
+			(i) => self.mineola.outputs.output_name[i],
+		),
+		[FeedbackId.OutputLevel]: channelValue(
+			'Output - Output Level',
+			'Output',
+			outputCount,
+			'outputs',
+			(i) => OutputLevel[self.mineola.outputs.select_level[i]],
+		),
+		[FeedbackId.OutputSignalLevel]: channelValue(
+			'Output - Signal Level',
+			'Output',
+			outputCount,
+			'levels',
+			(i) => Math.round((self.mineola.levelsOutput[i] ?? -200) * 100) / 100, // Round to 2 decimals
+		),
+
+		// Preset
+		[FeedbackId.PresetValid]: channelBoolean(
+			'Preset - Valid',
+			'Preset',
+			presetCount,
+			'presets',
+			(i) => self.mineola.presets.valid[i],
+		),
+		[FeedbackId.PresetName]: channelValue(
+			'Preset - Name',
+			'Preset',
+			presetCount,
+			'presets',
+			(i) => self.mineola.presets.name[i],
+		),
+
+		// Information
+		[FeedbackId.InfoModel]: simpleValue('Information - Model Name', 'information', () => self.mineola.info.model_name),
+		[FeedbackId.InfoVersion]: simpleValue('Information - Version', 'information', () => self.mineola.info.version),
+		[FeedbackId.InfoMcuVersion]: simpleValue(
+			'Information - MCU Version',
+			'information',
+			() => self.mineola.info.mcu_version,
+		),
+		[FeedbackId.InfoDepSdk]: simpleValue('Information - DEP SDK', 'information', () => self.mineola.info.depsdk),
+		[FeedbackId.InfoHostName]: simpleValue(
+			'Information - Hostname',
+			'information',
+			() => self.mineola.info.ip_hostname,
+		),
+		[FeedbackId.InfoMacPrimary]: simpleValue(
+			'Information - MAC Address Primary',
+			'information',
+			() => self.mineola.info.mac_address,
+		),
+		[FeedbackId.InfoMacSecondary]: simpleValue(
+			'Information - MAC Address Secondary',
+			'information',
+			() => self.mineola.info.secondary_mac_address,
+		),
+		[FeedbackId.InfoIpPrimary]: simpleValue(
+			'Information - IP Address Primary',
+			'information',
+			() => self.mineola.info.ip_address,
+		),
+		[FeedbackId.InfoIpSecondary]: simpleValue(
+			'Information - IP Address Secondary',
+			'information',
+			() => self.mineola.info.secondary_ip_address,
+		),
 	}
-
-	// Power & Output Master
-	feedbacks.power = createSimpleFeedback('Power', 'power', () => self.mineola.power, 'boolean')
-	feedbacks.outputMasterMute = createSimpleFeedback(
-		'Output Master - Mute',
-		'outputMaster',
-		() => self.mineola.outputMasterMute,
-		'boolean',
-	)
-	feedbacks.outputMasterVolume = createSimpleFeedback(
-		'Output Master - Volume',
-		'outputMaster',
-		() => self.mineola.outputMasterVolume,
-	)
-
-	// Input feedbacks
-	feedbacks.inputMute = createChannelFeedback(
-		'Input - Mute',
-		'Input',
-		self.mineola.inputCount,
-		'inputs',
-		(chan) => self.mineola.inputs.input_mute[chan - 1],
-		'boolean',
-	)
-	feedbacks.inputP48 = createChannelFeedback(
-		'Input - Phantom Power',
-		'Input',
-		self.mineola.inputCount,
-		'inputs',
-		(chan) => self.mineola.inputs.input_phantom_power[chan - 1],
-		'boolean',
-	)
-	feedbacks.inputGain = createChannelFeedback(
-		'Input - Gain',
-		'Input',
-		self.mineola.inputCount,
-		'inputs',
-		(chan) => self.mineola.inputs.input_gain[chan - 1],
-	)
-	feedbacks.inputSensitivity = createChannelFeedback(
-		'Input - Sensitivity',
-		'Input',
-		self.mineola.inputCount,
-		'inputs',
-		(chan) => InputSensitivity[self.mineola.inputs.input_sensitivity[chan - 1]],
-	)
-	feedbacks.inputName = createChannelFeedback(
-		'Input - Name',
-		'Input',
-		self.mineola.inputCount,
-		'inputs',
-		(chan) => self.mineola.inputs.input_name[chan - 1],
-	)
-	feedbacks.inputSignalLevel = createChannelFeedback(
-		'Input - Signal Level',
-		'Input',
-		self.mineola.inputCount,
-		'levels',
-		(chan) => Math.round((self.mineola.levelsInput[chan - 1] ?? -200) * 100) / 100, //Round to 2 decimals
-	)
-
-	// Output feedbacks
-	feedbacks.outputMute = createChannelFeedback(
-		'Output - Mute',
-		'Output',
-		self.mineola.outputCount,
-		'outputs',
-		(chan) => self.mineola.outputs.output_volume_mute[chan - 1],
-		'boolean',
-	)
-	feedbacks.outputMasterOutMember = createChannelFeedback(
-		'Output - Master Output Member',
-		'Output',
-		self.mineola.outputCount,
-		'outputs',
-		(chan) => self.mineola.outputs.master_out_member[chan - 1],
-		'boolean',
-	)
-	feedbacks.outputGain = createChannelFeedback(
-		'Output - Gain',
-		'Output',
-		self.mineola.outputCount,
-		'outputs',
-		(chan) => self.mineola.outputs.output_gain[chan - 1],
-	)
-	feedbacks.outputDelay = createChannelFeedback(
-		'Output - Delay',
-		'Output',
-		self.mineola.outputCount,
-		'outputs',
-		(chan) => self.mineola.outputs.output_audio_delay[chan - 1],
-	)
-	feedbacks.outputName = createChannelFeedback(
-		'Output - Name',
-		'Output',
-		self.mineola.outputCount,
-		'outputs',
-		(chan) => self.mineola.outputs.output_name[chan - 1],
-	)
-	feedbacks.outputlLevel = createChannelFeedback(
-		'Output - Output Level',
-		'Output',
-		self.mineola.outputCount,
-		'outputs',
-		(chan) => OutputLevel[self.mineola.outputs.select_level[chan - 1]],
-	)
-	feedbacks.outputSignalLevel = createChannelFeedback(
-		'Output - Signal Level',
-		'Output',
-		self.mineola.outputCount,
-		'levels',
-		(chan) => Math.round((self.mineola.levelsOutput[chan - 1] ?? -200) * 100) / 100, // Round to 2 decimals
-	)
-
-	// Preset feedbacks
-	feedbacks.presetValid = createChannelFeedback(
-		'Preset - Valid',
-		'Preset',
-		self.mineola.presetCount,
-		'presets',
-		(chan) => self.mineola.presets.valid[chan - 1],
-		'boolean',
-	)
-	feedbacks.presetName = createChannelFeedback(
-		'Preset - Name',
-		'Preset',
-		self.mineola.presetCount,
-		'presets',
-		(chan) => self.mineola.presets.name[chan - 1],
-	)
-
-	// Information feedbacks
-	feedbacks.infoModel = createSimpleFeedback(
-		'Information - Model Name',
-		'information',
-		() => self.mineola.info.model_name,
-	)
-	feedbacks.infoVersion = createSimpleFeedback('Information - Version', 'information', () => self.mineola.info.version)
-	feedbacks.infoMcuVersion = createSimpleFeedback(
-		'Information - MCU Version',
-		'information',
-		() => self.mineola.info.mcu_version,
-	)
-	feedbacks.infodepsdk = createSimpleFeedback('Information - DEP SDK', 'information', () => self.mineola.info.depsdk)
-	feedbacks.infoHostName = createSimpleFeedback(
-		'Information - Hostname',
-		'information',
-		() => self.mineola.info.ip_hostname,
-	)
-	feedbacks.infoMacPri = createSimpleFeedback(
-		'Information - MAC Address Primary',
-		'information',
-		() => self.mineola.info.mac_address,
-	)
-	feedbacks.infoMacSec = createSimpleFeedback(
-		'Information - MAC Address Secondary',
-		'information',
-		() => self.mineola.info.secondary_mac_address,
-	)
-	feedbacks.infoIpPri = createSimpleFeedback(
-		'Information - IP Address Primary',
-		'information',
-		() => self.mineola.info.ip_address,
-	)
-	feedbacks.infoIpSec = createSimpleFeedback(
-		'Information - IP Address Secondary',
-		'information',
-		() => self.mineola.info.secondary_ip_address,
-	)
 
 	self.setFeedbackDefinitions(feedbacks)
 }

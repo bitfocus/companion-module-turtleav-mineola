@@ -7,3 +7,6 @@ DEBUG-*
 /.yarn
 /.vscode
 /*.zip
+
+/bench
+/coverage

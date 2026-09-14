@@ -1,10 +1,10 @@
-import { InstanceBase, runEntrypoint, InstanceStatus, SomeCompanionConfigField } from '@companion-module/base'
+import { InstanceBase, InstanceStatus, type SomeCompanionConfigField } from '@companion-module/base'
 import { GetConfigFields, type ModuleConfig } from './config.js'
-import { UpdateVariableDefinitions } from './variables.js'
+import { UpdateVariableDefinitions, type VariablesSchema } from './variables.js'
 import { UpgradeScripts } from './upgrades.js'
-import { UpdateActions } from './actions.js'
+import { UpdateActions, type ActionSchema } from './actions.js'
 import { handleError } from './errors.js'
-import { UpdateFeedbacks } from './feedbacks.js'
+import { UpdateFeedbacks, type FeedbackSchema } from './feedbacks.js'
 import { UpdatePresets } from './presets.js'
 import { StatusManager } from './status.js'
 import { Mineola, type MineolaEvents } from './mineola.js'
@@ -26,7 +26,17 @@ const WEBSOCKET_PORT = 41230
 
 type FeedbackCategory = keyof MineolaEvents
 
-export class ModuleInstance extends InstanceBase<ModuleConfig> {
+export type ModuleTypes = {
+	config: ModuleConfig
+	secrets: undefined
+	actions: ActionSchema
+	feedbacks: FeedbackSchema
+	variables: VariablesSchema
+}
+
+export { UpgradeScripts }
+
+export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 	#config!: ModuleConfig // Setup in init()
 	#client!: AxiosInstance
 	#socket!: WebSocket
@@ -92,9 +102,10 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				await this.#setupDevice()
 				this.#newSocket(host)
 				this.updateAllDefs()
+				// Feedbacks register their polling subscriptions from inside their callbacks, so checking them all is
+				// what tells the polling loop which data to fetch
 				void this.#startPolling().then(() => {
-					this.subscribeFeedbacks()
-					this.checkFeedbacks()
+					this.checkAllFeedbacks()
 				})
 			} catch (err) {
 				handleError(err, this)
@@ -106,6 +117,11 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 	getConfigFields(): SomeCompanionConfigField[] {
 		return GetConfigFields()
+	}
+
+	/** The connection's Verbose Logs setting, for the other files' loggers to gate their debug output on */
+	public get verbose(): boolean {
+		return this.#config.verbose
 	}
 
 	public debug(msg: string | object): void {
@@ -174,7 +190,12 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 	}
 
-	public async httpPost(data: HttpMessage, priority: number = 1): Promise<AxiosResponse> {
+	/**
+	 * @param signal Optional caller signal, eg an action's context.signal. Combined with the instance controller so the
+	 * request is dropped when either aborts: the user no longer wants it, or the connection is being torn down.
+	 */
+	public async httpPost(data: HttpMessage, priority: number = 1, signal?: AbortSignal): Promise<AxiosResponse> {
+		const combinedSignal = signal ? AbortSignal.any([this.#controller.signal, signal]) : this.#controller.signal
 		return await this.#queue.add(
 			async ({ signal }) => {
 				if (!this.#client) throw new Error('Axios Client not initialised')
@@ -189,7 +210,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 				return response
 			},
-			{ priority, signal: this.#controller.signal },
+			{ priority, signal: combinedSignal },
 		)
 	}
 
@@ -202,8 +223,13 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			this.httpPost({ comhead: 'get_information_status' }),
 		])
 
-		this.mineola = Mineola.createMineola(inputs, outputs, presets, info, this.debug.bind(this), (err) =>
-			handleError(err, this),
+		this.mineola = Mineola.createMineola(
+			inputs,
+			outputs,
+			presets,
+			info,
+			() => this.verbose,
+			(err) => handleError(err, this),
 		)
 		this.#setupFeedbackEventHandlers()
 	}
@@ -244,7 +270,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		() => {
 			this.debug(`Updating Action / Feedback / Variable / Preset definitions`)
 			this.updateAllDefs()
-			this.checkFeedbacks()
+			this.checkAllFeedbacks()
 		},
 		5000,
 		{ edges: ['trailing'], signal: this.#controller.signal },
@@ -351,5 +377,3 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		UpdateVariableDefinitions(this)
 	}
 }
-
-runEntrypoint(ModuleInstance, UpgradeScripts)

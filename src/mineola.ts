@@ -23,8 +23,10 @@ import { AxiosResponse } from 'axios'
 import { ZodError, type ZodType } from 'zod'
 import type { WebSocket } from 'ws'
 import EventEmitter from 'events'
-import { DropdownChoice } from '@companion-module/base'
+import { createModuleLogger, type DropdownChoice } from '@companion-module/base'
 import { ZodDataError } from './errors.js'
+
+const logger = createModuleLogger('Device')
 
 // Parses with the given schema, wrapping any ZodError with the raw input so callers can log it.
 function parseOrThrow<T>(schema: ZodType<T>, data: unknown): T {
@@ -72,7 +74,7 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 	#outputParser:
 		typeof OutputStatusSchema2 | typeof OutputStatusSchema4 | typeof OutputStatusSchema8 | typeof OutputStatusSchema16 =
 		OutputStatusSchema2
-	#debug: (msg: string | object) => void
+	#isVerbose: () => boolean
 	#onError: (err: unknown) => void
 
 	private constructor(
@@ -80,11 +82,11 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		outputs: OutputStatus,
 		presets: PresetStatus,
 		info: InformationStatus,
-		debug: (msg: string | object) => void,
+		isVerbose: () => boolean,
 		onError: (err: unknown) => void,
 	) {
 		super()
-		this.#debug = debug
+		this.#isVerbose = isVerbose
 		this.#onError = onError
 		switch (info.model_name) {
 			case 'TAV-MINEOLA22XLR':
@@ -125,7 +127,7 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		outs: AxiosResponse<any, any>,
 		presets: AxiosResponse<any, any>,
 		info: AxiosResponse<any, any>,
-		debug: (msg: string | object) => void,
+		isVerbose: () => boolean,
 		onError: (err: unknown) => void,
 	): Mineola {
 		const inputStatus = parseOrThrow(InputStatusSchema, ins.data)
@@ -133,7 +135,13 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		const presetStatus = parseOrThrow(PresetStatusSchema, presets.data)
 		const infoStatus = parseOrThrow(InformationStatusSchema, info.data)
 
-		return new Mineola(inputStatus, outputStatus, presetStatus, infoStatus, debug, onError)
+		return new Mineola(inputStatus, outputStatus, presetStatus, infoStatus, isVerbose, onError)
+	}
+
+	/** Verbose-only detail, gated on the connection's Verbose Logs setting */
+	#debug(msg: object): void {
+		if (!this.#isVerbose()) return
+		logger.debug(JSON.stringify(msg))
 	}
 
 	public set WebSocketMessage(msg: WebSocket.MessageEvent) {
@@ -303,16 +311,16 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 
 	// Getters for dropdowns
 
-	get inputChoices(): DropdownChoice[] {
-		const choices: DropdownChoice[] = []
+	get inputChoices(): DropdownChoice<number>[] {
+		const choices: DropdownChoice<number>[] = []
 		this.#inputs.input_name.forEach((value, index) => {
 			choices.push({ id: index, label: value })
 		})
 		return choices
 	}
 
-	get outputChoices(): DropdownChoice[] {
-		const choices: DropdownChoice[] = []
+	get outputChoices(): DropdownChoice<number>[] {
+		const choices: DropdownChoice<number>[] = []
 		this.#outputs.output_name.forEach((value, index) => {
 			choices.push({ id: index, label: value })
 		})
