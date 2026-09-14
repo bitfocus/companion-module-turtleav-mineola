@@ -8,6 +8,9 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint
@@ -15,24 +18,15 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Use Node.js 22.x
         # This should match the version of Node.js you have defined in the manifest.json runtime field
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22.x
       - name: Prepare Environment
         run: |
           corepack enable
-      - name: Prepare Environment (For template repository)
-        # Only run this step if the repository is a template repository
-        # If you are using this in a module, you can remove this step
-        if: ${{ contains(github.repository, 'companion-module-template-') }}
-        run: |
-          # Perform an install to generate the lockfile
-          yarn install
-        env:
-          CI: false
       - name: Prepare module
         run: |
           yarn install
@@ -56,9 +50,9 @@ jobs:
   #   timeout-minutes: 15
 
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v7
   #     - name: Use Node.js 22.x
-  #       uses: actions/setup-node@v4
+  #       uses: actions/setup-node@v7
   #       with:
   #         node-version: 22.x
   #     - name: Prepare Environment
@@ -73,4 +67,4 @@ jobs:
   #       env:
   #         CI: true
   #     - name: Send coverage
-  #       uses: codecov/codecov-action@v5
+  #       uses: codecov/codecov-action@v7
