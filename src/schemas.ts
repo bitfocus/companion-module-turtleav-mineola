@@ -1,6 +1,13 @@
 import * as z from 'zod'
 import { SetMessage, EqTypes } from './types.js'
 
+// Schemas that are parsed directly are exported wrapped in z.compile(), so zod generates a specialised
+// parser once at load rather than walking the schema on every parse. Compile here, at module scope —
+// never at a parse site, which would regenerate the parser on every call.
+//
+// Composite schemas (the unions below) are built from the uncompiled bases and compiled once as a whole,
+// rather than composed from the compiled exports.
+
 const BinaryBooleanSchema = z.union([z.literal(0), z.literal(1)]).transform((n) => n === 1)
 
 /**********************/
@@ -22,7 +29,7 @@ export const MessageErrorSchema = z.object({
 
 export type MessageErrorSchema = z.infer<typeof MessageErrorSchema>
 
-export const SetOrErrorResponseSchema = z.union([SetResponseSchema, MessageErrorSchema])
+export const SetOrErrorResponseSchema = z.compile(z.union([SetResponseSchema, MessageErrorSchema]))
 
 export type SetOrErrorResponse = z.infer<typeof SetOrErrorResponseSchema>
 
@@ -47,19 +54,19 @@ const createInputStatusSchema = <T extends 2 | 4 | 8 | 16>(size: T) => {
 	})
 }
 
-// Create schemas for each size
-export const InputStatusSchema2 = createInputStatusSchema(2)
-export const InputStatusSchema4 = createInputStatusSchema(4)
-export const InputStatusSchema8 = createInputStatusSchema(8)
-export const InputStatusSchema16 = createInputStatusSchema(16)
+// Uncompiled bases for each size, used to build the unions
+const inputStatus2 = createInputStatusSchema(2)
+const inputStatus4 = createInputStatusSchema(4)
+const inputStatus8 = createInputStatusSchema(8)
+const inputStatus16 = createInputStatusSchema(16)
+
+export const InputStatusSchema2 = z.compile(inputStatus2)
+export const InputStatusSchema4 = z.compile(inputStatus4)
+export const InputStatusSchema8 = z.compile(inputStatus8)
+export const InputStatusSchema16 = z.compile(inputStatus16)
 
 // Union type that accepts any valid size
-export const InputStatusSchema = z.union([
-	InputStatusSchema2,
-	InputStatusSchema4,
-	InputStatusSchema8,
-	InputStatusSchema16,
-])
+export const InputStatusSchema = z.compile(z.union([inputStatus2, inputStatus4, inputStatus8, inputStatus16]))
 
 // Type inference
 export type InputStatus = z.infer<typeof InputStatusSchema>
@@ -88,19 +95,19 @@ const createOutputStatusSchema = <T extends 2 | 4 | 8 | 16>(size: T) => {
 	})
 }
 
-// Create schemas for each size
-export const OutputStatusSchema2 = createOutputStatusSchema(2)
-export const OutputStatusSchema4 = createOutputStatusSchema(4)
-export const OutputStatusSchema8 = createOutputStatusSchema(8)
-export const OutputStatusSchema16 = createOutputStatusSchema(16)
+// Uncompiled bases for each size, used to build the unions
+const outputStatus2 = createOutputStatusSchema(2)
+const outputStatus4 = createOutputStatusSchema(4)
+const outputStatus8 = createOutputStatusSchema(8)
+const outputStatus16 = createOutputStatusSchema(16)
+
+export const OutputStatusSchema2 = z.compile(outputStatus2)
+export const OutputStatusSchema4 = z.compile(outputStatus4)
+export const OutputStatusSchema8 = z.compile(outputStatus8)
+export const OutputStatusSchema16 = z.compile(outputStatus16)
 
 // Union type that accepts any valid size
-export const OutputStatusSchema = z.union([
-	OutputStatusSchema2,
-	OutputStatusSchema4,
-	OutputStatusSchema8,
-	OutputStatusSchema16,
-])
+export const OutputStatusSchema = z.compile(z.union([outputStatus2, outputStatus4, outputStatus8, outputStatus16]))
 
 // Type inference
 export type OutputStatus = z.infer<typeof OutputStatusSchema>
@@ -109,7 +116,7 @@ export type OutputStatus = z.infer<typeof OutputStatusSchema>
 /*   Preset Status    */
 /**********************/
 
-export const PresetStatusSchema = z.object({
+const presetStatus = z.object({
 	power: BinaryBooleanSchema,
 	valid: z.array(BinaryBooleanSchema).length(5),
 	name: z.array(z.string()).length(5),
@@ -118,13 +125,15 @@ export const PresetStatusSchema = z.object({
 	comhead: z.literal('get_preset_status'),
 })
 
+export const PresetStatusSchema = z.compile(presetStatus)
+
 export type PresetStatus = z.infer<typeof PresetStatusSchema>
 
 /**********************/
 /* Information Status */
 /**********************/
 
-export const InformationStatusSchema = z.object({
+const informationStatus = z.object({
 	power: BinaryBooleanSchema,
 	model_name: z.string(),
 	version: z.string(),
@@ -151,6 +160,8 @@ export const InformationStatusSchema = z.object({
 	comhead: z.literal('get_information_status'),
 	result: z.int(),
 })
+
+export const InformationStatusSchema = z.compile(informationStatus)
 
 export type InformationStatus = z.infer<typeof InformationStatusSchema>
 
@@ -185,12 +196,14 @@ export type PEQBand = z.infer<typeof PEQBandSchema>
 /*     Dsp Status     */
 /**********************/
 
-export const DSPStatusSchema = z.object({
+const dspStatus = z.object({
 	power: BinaryBooleanSchema,
 	output_master_vol_value: z.number().int().min(0).max(100),
 	output_master_vol_mute: BinaryBooleanSchema,
 	comhead: z.literal('get_dsp_status'),
 })
+
+export const DSPStatusSchema = z.compile(dspStatus)
 
 export type DSPStatus = z.infer<typeof DSPStatusSchema>
 
@@ -256,58 +269,66 @@ export const LevelStatusSchema = z.object({
 
 export type LevelStatus = z.infer<typeof LevelStatusSchema>
 
-export const WebSocketMessageSchema2 = z.discriminatedUnion('comhead', [
-	LevelStatusSchema,
-	PresetStatusSchema,
-	InformationStatusSchema,
-	PEQStatusSchema,
-	DSPStatusSchema,
-	SystemStatusSchema,
-	NetworkStatusSchema,
-	InputStatusSchema2,
-	OutputStatusSchema2,
-])
+export const WebSocketMessageSchema2 = z.compile(
+	z.discriminatedUnion('comhead', [
+		LevelStatusSchema,
+		presetStatus,
+		informationStatus,
+		PEQStatusSchema,
+		dspStatus,
+		SystemStatusSchema,
+		NetworkStatusSchema,
+		inputStatus2,
+		outputStatus2,
+	]),
+)
 
 export type WebSocketMessage2 = z.infer<typeof WebSocketMessageSchema2>
 
-export const WebSocketMessageSchema4 = z.discriminatedUnion('comhead', [
-	LevelStatusSchema,
-	PresetStatusSchema,
-	InformationStatusSchema,
-	PEQStatusSchema,
-	DSPStatusSchema,
-	SystemStatusSchema,
-	NetworkStatusSchema,
-	InputStatusSchema4,
-	OutputStatusSchema4,
-])
+export const WebSocketMessageSchema4 = z.compile(
+	z.discriminatedUnion('comhead', [
+		LevelStatusSchema,
+		presetStatus,
+		informationStatus,
+		PEQStatusSchema,
+		dspStatus,
+		SystemStatusSchema,
+		NetworkStatusSchema,
+		inputStatus4,
+		outputStatus4,
+	]),
+)
 
 export type WebSocketMessage4 = z.infer<typeof WebSocketMessageSchema4>
 
-export const WebSocketMessageSchema8 = z.discriminatedUnion('comhead', [
-	LevelStatusSchema,
-	PresetStatusSchema,
-	InformationStatusSchema,
-	PEQStatusSchema,
-	DSPStatusSchema,
-	SystemStatusSchema,
-	NetworkStatusSchema,
-	InputStatusSchema8,
-	OutputStatusSchema8,
-])
+export const WebSocketMessageSchema8 = z.compile(
+	z.discriminatedUnion('comhead', [
+		LevelStatusSchema,
+		presetStatus,
+		informationStatus,
+		PEQStatusSchema,
+		dspStatus,
+		SystemStatusSchema,
+		NetworkStatusSchema,
+		inputStatus8,
+		outputStatus8,
+	]),
+)
 
 export type WebSocketMessage8 = z.infer<typeof WebSocketMessageSchema8>
 
-export const WebSocketMessageSchema16 = z.discriminatedUnion('comhead', [
-	LevelStatusSchema,
-	PresetStatusSchema,
-	InformationStatusSchema,
-	PEQStatusSchema,
-	DSPStatusSchema,
-	SystemStatusSchema,
-	NetworkStatusSchema,
-	InputStatusSchema16,
-	OutputStatusSchema16,
-])
+export const WebSocketMessageSchema16 = z.compile(
+	z.discriminatedUnion('comhead', [
+		LevelStatusSchema,
+		presetStatus,
+		informationStatus,
+		PEQStatusSchema,
+		dspStatus,
+		SystemStatusSchema,
+		NetworkStatusSchema,
+		inputStatus16,
+		outputStatus16,
+	]),
+)
 
 export type WebSocketMessage16 = z.infer<typeof WebSocketMessageSchema16>
