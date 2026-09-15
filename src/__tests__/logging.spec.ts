@@ -88,7 +88,14 @@ describe('Actions logger', () => {
 		const setActionDefinitions = vi.fn<(defs: CompanionActionDefinitions<ActionSchema>) => void>()
 		const log = vi.fn()
 		const self = {
-			mineola: { inputCount: 2, outputCount: 2, presetCount: 2, inputs: {}, outputs: {}, presets: {} },
+			mineola: {
+				inputCount: 2,
+				outputCount: 2,
+				presetCount: 2,
+				inputs: { input_name: ['In 1', 'In 2'] },
+				outputs: { output_name: ['Out 1', 'Out 2'] },
+				presets: { name: ['Preset 1', 'Preset 2'] },
+			},
 			setActionDefinitions,
 			log,
 			httpPost: vi.fn().mockResolvedValue({ data: { comhead: 'set_system_reboot', result: 1 } }),

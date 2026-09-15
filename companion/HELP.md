@@ -5,7 +5,7 @@ This module uses HTTP & WebSockets to control the Turtle AV Mineola audio proces
 **Minimum Supported Firmware**
 
 - **Mineola 2x2:** `v1.10.10`
-- **Mineola 8x8:** `1.10.09`
+- **Mineola 8x8:** `v1.10.09`
 
 ---
 

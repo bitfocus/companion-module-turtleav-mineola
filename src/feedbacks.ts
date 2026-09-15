@@ -7,7 +7,7 @@ import {
 	type JsonValue,
 } from '@companion-module/base'
 import type ModuleInstance from './main.js'
-import type { MineolaEvents } from './mineola.js'
+import type { MineolaStateEvent } from './mineola.js'
 import { ChannelOption } from './options.js'
 import { InputSensitivity, OutputLevel } from './types.js'
 
@@ -80,7 +80,7 @@ export type FeedbackSchema = {
 	[FeedbackId.InfoIpSecondary]: ValueFeedback<NoOptions>
 }
 
-type SubscriptionKey = keyof MineolaEvents
+type SubscriptionKey = MineolaStateEvent
 type ChannelType = 'Input' | 'Output' | 'Preset'
 
 const defaultStyle = {
@@ -113,6 +113,18 @@ function getChannelIndex(options: ChannelOptions, name: ChannelType, count: numb
 }
 
 export function UpdateFeedbacks(self: ModuleInstance): void {
+	/** Current names for a channel dropdown's labels. Read at build time — definitions are rebuilt on channelNames. */
+	const channelNames = (channelType: ChannelType): readonly string[] => {
+		switch (channelType) {
+			case 'Input':
+				return self.mineola.inputs.input_name
+			case 'Output':
+				return self.mineola.outputs.output_name
+			case 'Preset':
+				return self.mineola.presets.name
+		}
+	}
+
 	const simpleBoolean = (
 		name: string,
 		key: SubscriptionKey,
@@ -154,7 +166,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		type: 'boolean',
 		name,
 		defaultStyle,
-		options: [ChannelOption(count, channelType)],
+		options: [ChannelOption(channelNames(channelType), channelType)],
 		callback: (feedback) => {
 			// Subscribe before validating, so a feedback with a bad channel still keeps its data polled
 			feedbackSubscribe(self, key, feedback)
@@ -172,7 +184,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 	): CompanionValueFeedbackDefinition<ChannelOptions> => ({
 		type: 'value',
 		name,
-		options: [ChannelOption(count, channelType)],
+		options: [ChannelOption(channelNames(channelType), channelType)],
 		callback: (feedback) => {
 			feedbackSubscribe(self, key, feedback)
 			return getValue(getChannelIndex(feedback.options, channelType, count))

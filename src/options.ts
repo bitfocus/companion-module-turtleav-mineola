@@ -1,18 +1,23 @@
-import type { CompanionInputFieldNumber } from '@companion-module/base'
+import type { CompanionInputFieldDropdown } from '@companion-module/base'
 
 /**
- * 1-based channel selector. Was a `textinput` before API 2.0 — UpgradeScripts[0] converts saved values.
- * Variables and expressions are handled by Companion's expression mode, so no regex or `useVariables` is needed.
+ * 1-based channel selector, labelled "#: Name" from the device's current names.
+ *
+ * The ids are the same 1-based numbers the option has stored since UpgradeScripts[0], so saved buttons still match.
+ * Because the labels carry names, the definitions must be rebuilt when a name changes — Mineola emits
+ * `channelNames` for that, and the instance rebuilds on it.
  */
-export const ChannelOption = (max: number, label = 'Channel'): CompanionInputFieldNumber<'channel'> => {
+export const ChannelOption = (
+	names: readonly string[],
+	label = 'Channel',
+): CompanionInputFieldDropdown<'channel', number> => {
 	return {
-		type: 'number',
+		type: 'dropdown',
 		id: 'channel',
 		label: label,
-		description: `${label} 1 to ${max}`,
+		// Channel 1. A literal because the choices are built from device names at runtime, so there is no fixed entry to reference
 		default: 1,
-		min: 1,
-		max: max,
-		asInteger: true,
+		allowCustom: false,
+		choices: names.map((name, index) => ({ id: index + 1, label: `${index + 1}: ${name}` })),
 	}
 }

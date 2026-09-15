@@ -23,7 +23,7 @@ import { AxiosResponse } from 'axios'
 import { ZodError, type ZodType } from 'zod'
 import type { WebSocket } from 'ws'
 import EventEmitter from 'events'
-import { createModuleLogger, type DropdownChoice } from '@companion-module/base'
+import { createModuleLogger } from '@companion-module/base'
 import { ZodDataError } from './errors.js'
 
 const logger = createModuleLogger('Device')
@@ -46,7 +46,12 @@ export interface MineolaEvents {
 	power: []
 	outputMaster: []
 	levels: []
+	/** An input, output or preset name changed, so definitions with channel dropdowns need rebuilding */
+	channelNames: []
 }
+
+/** The events that carry device state, which feedbacks subscribe to — everything except channelNames */
+export type MineolaStateEvent = Exclude<keyof MineolaEvents, 'channelNames'>
 
 export class Mineola extends EventEmitter<MineolaEvents> {
 	#inputs!: InputStatus
@@ -194,8 +199,10 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 	#updateInputs(ins: InputStatus): void {
 		this.power = ins.power
 		if (isEqual(this.#inputs, ins)) return
+		const namesChanged = !isEqual(this.#inputs.input_name, ins.input_name)
 		this.#inputs = ins
 		this.emit('inputs')
+		if (namesChanged) this.emit('channelNames')
 	}
 
 	#updateOutputs(outs: OutputStatus): void {
@@ -203,8 +210,10 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		this.outputMasterMute = outs.output_master_vol_mute
 		this.outputMasterVolume = outs.output_master_vol_value
 		if (isEqual(this.#outputs, outs)) return
+		const namesChanged = !isEqual(this.#outputs.output_name, outs.output_name)
 		this.#outputs = outs
 		this.emit('outputs')
+		if (namesChanged) this.emit('channelNames')
 	}
 
 	#updatePresets(presets: PresetStatus): void {
@@ -212,8 +221,10 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		this.outputMasterMute = presets.o_master_vol_mute
 		this.outputMasterVolume = presets.o_master_vol_value
 		if (isEqual(this.#presets, presets)) return
+		const namesChanged = !isEqual(this.#presets.name, presets.name)
 		this.#presets = presets
 		this.emit('presets')
+		if (namesChanged) this.emit('channelNames')
 	}
 
 	#updateInformation(info: InformationStatus): void {
@@ -309,24 +320,6 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		return this.#levels.output_level
 	}
 
-	// Getters for dropdowns
-
-	get inputChoices(): DropdownChoice<number>[] {
-		const choices: DropdownChoice<number>[] = []
-		this.#inputs.input_name.forEach((value, index) => {
-			choices.push({ id: index, label: value })
-		})
-		return choices
-	}
-
-	get outputChoices(): DropdownChoice<number>[] {
-		const choices: DropdownChoice<number>[] = []
-		this.#outputs.output_name.forEach((value, index) => {
-			choices.push({ id: index, label: value })
-		})
-		return choices
-	}
-
 	// Public setters
 
 	set power(state: boolean) {
@@ -387,6 +380,7 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		if (this.#outputs.output_name[value.source] == value.name) return
 		this.#outputs.output_name[value.source] = value.name
 		this.emit('outputs')
+		this.emit('channelNames')
 	}
 
 	set presetName(value: { index: number; name: string }) {
@@ -394,6 +388,7 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		if (this.#presets.name[value.index] == value.name) return
 		this.#presets.name[value.index] = value.name
 		this.emit('presets')
+		this.emit('channelNames')
 	}
 	set presetClear(index: number) {
 		if (this.#presets.valid[index] == undefined) throw new Error('Preset out of range')
@@ -414,6 +409,7 @@ export class Mineola extends EventEmitter<MineolaEvents> {
 		if (this.#inputs.input_name[value.source] == value.name) return
 		this.#inputs.input_name[value.source] = value.name
 		this.emit('inputs')
+		this.emit('channelNames')
 	}
 
 	set inputGain(value: { source: number; gain: number }) {

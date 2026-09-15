@@ -119,7 +119,7 @@ describe('API 2.0 numeric option upgrade script', () => {
 	})
 })
 
-type DefinitionLike = { options: { id: string; type: string }[] } | undefined
+type DefinitionLike = { options: { id: string; type: string; choices?: { id: unknown }[] }[] } | undefined
 
 /** Enough of the instance for the definition builders, which only read counts and state arrays up front. */
 function fakeInstance() {
@@ -148,21 +148,27 @@ describe('upgrade maps match the current definitions', () => {
 	const actionDefs = setActionDefinitions.mock.calls[0][0]
 	const feedbackDefs = setFeedbackDefinitions.mock.calls[0][0]
 
-	const numberOptionIds = (def: DefinitionLike) => def?.options.filter((o) => o.type === 'number').map((o) => o.id)
+	// The script stores numbers, so each converted option must still hold a number: a number field, or a dropdown
+	// whose choice ids are numbers (channel became one after the migration, keeping the same 1-based values)
+	const numericOptionIds = (def: DefinitionLike) =>
+		def?.options
+			.filter(
+				(o) =>
+					o.type === 'number' ||
+					(o.type === 'dropdown' && o.choices !== undefined && o.choices.every((c) => typeof c.id === 'number')),
+			)
+			.map((o) => o.id)
 
 	it('defines every action and feedback id in the enums', () => {
 		expect(Object.keys(actionDefs).sort()).toEqual(Object.values(ActionId).sort())
 		expect(Object.keys(feedbackDefs).sort()).toEqual(Object.values(FeedbackId).sort())
 	})
 
-	it.each(Object.entries(numericActionOptionsApi2))('action %s: converted options are number fields', (id, keys) => {
-		expect(numberOptionIds(actionDefs[id])).toEqual(expect.arrayContaining(keys))
+	it.each(Object.entries(numericActionOptionsApi2))('action %s: converted options hold numbers', (id, keys) => {
+		expect(numericOptionIds(actionDefs[id])).toEqual(expect.arrayContaining(keys))
 	})
 
-	it.each(Object.entries(numericFeedbackOptionsApi2))(
-		'feedback %s: converted options are number fields',
-		(id, keys) => {
-			expect(numberOptionIds(feedbackDefs[id])).toEqual(expect.arrayContaining(keys))
-		},
-	)
+	it.each(Object.entries(numericFeedbackOptionsApi2))('feedback %s: converted options hold numbers', (id, keys) => {
+		expect(numericOptionIds(feedbackDefs[id])).toEqual(expect.arrayContaining(keys))
+	})
 })

@@ -91,6 +91,9 @@ const MUTE_CHOICES = [
 	{ id: 2, label: 'Toggle' },
 ] as const satisfies DropdownChoice<ToggleState>[]
 
+const OUTPUT_LEVEL_CHOICES = getDropdownChoices(OutputLevel)
+const INPUT_SENSITIVITY_CHOICES = getDropdownChoices(InputSensitivity)
+
 /** Channel options are 1-based for the user, the device and the state arrays are 0-based. */
 function getChannelIndex(options: ChannelOptions, count: number): number {
 	const index = Number(options.channel) - 1
@@ -143,7 +146,7 @@ export function UpdateActions(self: ModuleInstance): void {
 		return {
 			name: `${label} - Name`,
 			options: [
-				ChannelOption(count, label),
+				ChannelOption(getNames(), label),
 				{
 					type: 'textinput',
 					id: 'name',
@@ -193,7 +196,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'state',
 					label: 'State',
 					choices: STATE_CHOICES,
-					default: 2,
+					default: STATE_CHOICES[2].id,
 					allowCustom: false,
 				},
 			],
@@ -216,7 +219,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'state',
 					label: 'State',
 					choices: MUTE_CHOICES,
-					default: 2,
+					default: MUTE_CHOICES[2].id,
 					allowCustom: false,
 				},
 			],
@@ -268,13 +271,13 @@ export function UpdateActions(self: ModuleInstance): void {
 		[ActionId.OutputMasterMember]: {
 			name: 'Output - Master Output Member',
 			options: [
-				ChannelOption(self.mineola.outputCount, 'Output'),
+				ChannelOption(self.mineola.outputs.output_name, 'Output'),
 				{
 					type: 'dropdown',
 					id: 'state',
 					label: 'State',
 					choices: STATE_CHOICES,
-					default: 2,
+					default: STATE_CHOICES[2].id,
 					allowCustom: false,
 				},
 			],
@@ -290,13 +293,13 @@ export function UpdateActions(self: ModuleInstance): void {
 		[ActionId.OutputMute]: {
 			name: 'Output - Mute',
 			options: [
-				ChannelOption(self.mineola.outputCount, 'Output'),
+				ChannelOption(self.mineola.outputs.output_name, 'Output'),
 				{
 					type: 'dropdown',
 					id: 'state',
 					label: 'State',
 					choices: MUTE_CHOICES,
-					default: 2,
+					default: MUTE_CHOICES[2].id,
 					allowCustom: false,
 				},
 			],
@@ -312,7 +315,7 @@ export function UpdateActions(self: ModuleInstance): void {
 		[ActionId.OutputGain]: {
 			name: 'Output - Gain',
 			options: [
-				ChannelOption(self.mineola.outputCount, 'Output'),
+				ChannelOption(self.mineola.outputs.output_name, 'Output'),
 				{
 					type: 'number',
 					id: 'gain',
@@ -350,7 +353,7 @@ export function UpdateActions(self: ModuleInstance): void {
 		[ActionId.OutputDelay]: {
 			name: 'Output - Delay',
 			options: [
-				ChannelOption(self.mineola.outputCount, 'Output'),
+				ChannelOption(self.mineola.outputs.output_name, 'Output'),
 				{
 					type: 'number',
 					id: 'delay',
@@ -389,13 +392,13 @@ export function UpdateActions(self: ModuleInstance): void {
 		[ActionId.OutputLevel]: {
 			name: 'Output - Level',
 			options: [
-				ChannelOption(self.mineola.outputCount, 'Output'),
+				ChannelOption(self.mineola.outputs.output_name, 'Output'),
 				{
 					type: 'dropdown',
 					id: 'level',
 					label: 'Level',
-					default: 0,
-					choices: getDropdownChoices(OutputLevel),
+					default: OUTPUT_LEVEL_CHOICES[0].id,
+					choices: OUTPUT_LEVEL_CHOICES,
 				},
 			],
 			callback: async (action, context) => {
@@ -426,13 +429,13 @@ export function UpdateActions(self: ModuleInstance): void {
 		[ActionId.InputMute]: {
 			name: 'Input - Mute',
 			options: [
-				ChannelOption(self.mineola.inputCount, 'Input'),
+				ChannelOption(self.mineola.inputs.input_name, 'Input'),
 				{
 					type: 'dropdown',
 					id: 'state',
 					label: 'State',
 					choices: MUTE_CHOICES,
-					default: 2,
+					default: MUTE_CHOICES[2].id,
 					allowCustom: false,
 				},
 			],
@@ -448,13 +451,13 @@ export function UpdateActions(self: ModuleInstance): void {
 		[ActionId.InputPhantom]: {
 			name: 'Input - Phantom Power',
 			options: [
-				ChannelOption(self.mineola.inputCount, 'Input'),
+				ChannelOption(self.mineola.inputs.input_name, 'Input'),
 				{
 					type: 'dropdown',
 					id: 'state',
 					label: 'State',
 					choices: STATE_CHOICES,
-					default: 2,
+					default: STATE_CHOICES[2].id,
 					allowCustom: false,
 				},
 			],
@@ -475,7 +478,7 @@ export function UpdateActions(self: ModuleInstance): void {
 		[ActionId.InputGain]: {
 			name: 'Input - Gain',
 			options: [
-				ChannelOption(self.mineola.inputCount, 'Input'),
+				ChannelOption(self.mineola.inputs.input_name, 'Input'),
 				{
 					type: 'number',
 					id: 'gain',
@@ -513,13 +516,13 @@ export function UpdateActions(self: ModuleInstance): void {
 		[ActionId.InputSensitivity]: {
 			name: 'Input - Sensitivity',
 			options: [
-				ChannelOption(self.mineola.inputCount, 'Input'),
+				ChannelOption(self.mineola.inputs.input_name, 'Input'),
 				{
 					type: 'dropdown',
 					id: 'sensitivity',
 					label: 'Sensitivity',
-					default: 0,
-					choices: getDropdownChoices(InputSensitivity),
+					default: INPUT_SENSITIVITY_CHOICES[0].id,
+					choices: INPUT_SENSITIVITY_CHOICES,
 				},
 			],
 			callback: async (action, context) => {
@@ -556,7 +559,7 @@ export function UpdateActions(self: ModuleInstance): void {
 
 		[ActionId.PresetSave]: {
 			name: 'Preset - Save',
-			options: [ChannelOption(self.mineola.presetCount, 'Preset')],
+			options: [ChannelOption(self.mineola.presets.name, 'Preset')],
 			callback: async (action, context) => {
 				const preset = getChannelIndex(action.options, self.mineola.presetCount)
 				await sendCommand(self, { comhead: 'set_save_preset', index: preset }, context.signal, () => {
@@ -567,7 +570,7 @@ export function UpdateActions(self: ModuleInstance): void {
 
 		[ActionId.PresetClear]: {
 			name: 'Preset - Clear',
-			options: [ChannelOption(self.mineola.presetCount, 'Preset')],
+			options: [ChannelOption(self.mineola.presets.name, 'Preset')],
 			callback: async (action, context) => {
 				const preset = getChannelIndex(action.options, self.mineola.presetCount)
 				await sendCommand(self, { comhead: 'set_clear_preset', index: preset }, context.signal, () => {
@@ -578,7 +581,7 @@ export function UpdateActions(self: ModuleInstance): void {
 
 		[ActionId.PresetRecall]: {
 			name: 'Preset - Recall',
-			options: [ChannelOption(self.mineola.presetCount, 'Preset')],
+			options: [ChannelOption(self.mineola.presets.name, 'Preset')],
 			callback: async (action, context) => {
 				const preset = getChannelIndex(action.options, self.mineola.presetCount)
 				await sendCommand(self, { comhead: 'set_recall_preset', index: preset }, context.signal, () => {

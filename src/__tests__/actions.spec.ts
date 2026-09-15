@@ -62,3 +62,23 @@ describe('name action learn', () => {
 		expect(await learnName(defs, ActionId.InputName, 1)).toEqual({ name: 'In 1' })
 	})
 })
+
+describe('dropdown defaults', () => {
+	// Defaults reference their choices list rather than repeating the id, and this holds them to it
+	it('every dropdown default is one of its own choices', () => {
+		const { defs } = fakeInstance()
+		let checked = 0
+		for (const [id, def] of Object.entries(defs)) {
+			if (!def) continue
+			for (const option of def.options) {
+				if (option.type !== 'dropdown') continue
+				expect(
+					option.choices.map((choice) => choice.id),
+					`${id}.${option.id}`,
+				).toContain(option.default)
+				checked++
+			}
+		}
+		expect(checked).toBeGreaterThan(0)
+	})
+})

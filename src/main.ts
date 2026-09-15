@@ -7,7 +7,7 @@ import { handleError } from './errors.js'
 import { UpdateFeedbacks, type FeedbackSchema } from './feedbacks.js'
 import { UpdatePresets } from './presets.js'
 import { StatusManager } from './status.js'
-import { Mineola, type MineolaEvents } from './mineola.js'
+import { Mineola, type MineolaStateEvent } from './mineola.js'
 import type { HttpMessage } from './types.js'
 import axios, { AxiosInstance, AxiosResponse } from 'axios'
 import { WebSocket } from 'ws'
@@ -24,7 +24,7 @@ const HTTP_TIMEOUT = 1000
 const HTTP_HEADERS = { 'Content-Type': 'application/json' } as const
 const WEBSOCKET_PORT = 41230
 
-type FeedbackCategory = keyof MineolaEvents
+type FeedbackCategory = MineolaStateEvent
 
 export type ModuleTypes = {
 	config: ModuleConfig
@@ -78,6 +78,11 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 	#cleanup(): void {
 		this.#queue.clear()
 		this.#controller.abort()
+		// Cancelled explicitly rather than given the controller's signal: the controller is replaced on every config
+		// update, and an es-toolkit throttle whose signal has aborted silently drops calls made within its window
+		this.throttledCheckFeedbacksById.cancel()
+		this.throttledUpdateActionFeedbackDefs.cancel()
+		this.#throttledWebSocketReconnect.cancel()
 		this.#closeWebSocketConnection()
 		Object.values(this.#pollTimers).forEach((timer) => {
 			if (timer) clearTimeout(timer)
@@ -176,7 +181,7 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 			this.#newSocket(this.#config.host)
 		},
 		10000,
-		{ edges: ['trailing'], signal: this.#controller.signal },
+		{ edges: ['trailing'] },
 	)
 
 	#closeWebSocketConnection(): void {
@@ -243,6 +248,9 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 		;(Object.keys(this.feedbackSubscriptions) as FeedbackCategory[]).forEach((event) => {
 			this.mineola.on(event, () => handleFeedbackEvent(event))
 		})
+
+		// Channel dropdown labels carry the names, so a rename means rebuilding the definitions
+		this.mineola.on('channelNames', () => this.throttledUpdateActionFeedbackDefs())
 	}
 
 	throttledCheckFeedbacksById = throttle(
@@ -252,7 +260,7 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 			this.#feedbackIdsToCheck.clear()
 		},
 		50,
-		{ edges: ['trailing'], signal: this.#controller.signal },
+		{ edges: ['trailing'] },
 	)
 
 	updateAllDefs(): void {
@@ -272,8 +280,8 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 			this.updateAllDefs()
 			this.checkAllFeedbacks()
 		},
-		5000,
-		{ edges: ['trailing'], signal: this.#controller.signal },
+		1000,
+		{ edges: ['trailing'] },
 	)
 
 	async #startPolling(): Promise<void> {
