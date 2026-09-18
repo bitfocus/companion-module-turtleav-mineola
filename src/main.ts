@@ -13,6 +13,7 @@ import axios, { AxiosInstance, AxiosResponse } from 'axios'
 import { WebSocket } from 'ws'
 import PQueue from 'p-queue'
 import { throttle } from 'es-toolkit'
+import { abortableDelay } from './utils.js'
 
 const POLL_INTERVALS = {
 	IO: 250,
@@ -23,6 +24,8 @@ const POLL_INTERVALS = {
 const HTTP_TIMEOUT = 1000
 const HTTP_HEADERS = { 'Content-Type': 'application/json' } as const
 const WEBSOCKET_PORT = 41230
+/** Initial connection retries: doubling from INITIAL, capped at MAX (ms) */
+const RETRY_BACKOFF = { INITIAL: 1000, MAX: 30000 } as const
 
 type FeedbackCategory = MineolaStateEvent
 
@@ -97,27 +100,46 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 		// Cleanup old connections
 		this.#cleanup()
 		this.#controller = new AbortController()
-		this.#setupConnection(config.host).catch(() => {})
+		// Not awaited: init awaits configUpdated, and must not wait on a device that may be offline
+		void this.#connectWithRetry(config.host, this.#controller.signal)
 	}
 
-	async #setupConnection(host: string): Promise<void> {
-		if (host) {
-			try {
-				this.#createClient(host)
-				await this.#setupDevice()
-				this.#newSocket(host)
-				this.updateAllDefs()
-				// Feedbacks register their polling subscriptions from inside their callbacks, so checking them all is
-				// what tells the polling loop which data to fetch
-				void this.#startPolling().then(() => {
-					this.checkAllFeedbacks()
-				})
-			} catch (err) {
-				handleError(err, this)
-			}
-		} else {
+	/**
+	 * Connects, retrying with backoff until it succeeds or `signal` aborts. `signal` is the controller of the config
+	 * this loop was started for, captured rather than re-read: a config update or destroy aborts it, and the new config
+	 * runs its own loop, so this one must stop rather than reconnect to a host that is no longer configured.
+	 */
+	async #connectWithRetry(host: string, signal: AbortSignal): Promise<void> {
+		if (!host) {
 			this.statusManager.updateStatus(InstanceStatus.BadConfig, `No host`)
+			return
 		}
+		for (let attempt = 0; !signal.aborted; attempt++) {
+			try {
+				await this.#setupConnection(host)
+				return
+			} catch (err) {
+				// Superseded: this attempt failed because its requests were aborted, which is not worth retrying
+				if (signal.aborted) return
+				handleError(err, this)
+				const delay = Math.min(RETRY_BACKOFF.INITIAL * 2 ** attempt, RETRY_BACKOFF.MAX)
+				this.log('info', `Connection failed, retrying in ${delay / 1000}s`)
+				await abortableDelay(delay, signal)
+			}
+		}
+	}
+
+	/** A single connection attempt. Throws on failure, and #connectWithRetry decides whether to try again. */
+	async #setupConnection(host: string): Promise<void> {
+		this.#createClient(host)
+		await this.#setupDevice()
+		this.#newSocket(host)
+		this.updateAllDefs()
+		// Feedbacks register their polling subscriptions from inside their callbacks, so checking them all is
+		// what tells the polling loop which data to fetch
+		void this.#startPolling().then(() => {
+			this.checkAllFeedbacks()
+		})
 	}
 
 	getConfigFields(): SomeCompanionConfigField[] {
