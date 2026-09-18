@@ -404,7 +404,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			callback: async (action, context) => {
 				const out = getChannelIndex(action.options, self.mineola.outputCount)
 				const value = Number(action.options.level)
-				await sendCommand(self, { comhead: 'set_output_level', level: value }, context.signal, () => {
+				await sendCommand(self, { comhead: 'set_output_level', source: out, level: value }, context.signal, () => {
 					self.mineola.outputLevel = { source: out, level: value }
 				})
 			},
@@ -528,9 +528,14 @@ export function UpdateActions(self: ModuleInstance): void {
 			callback: async (action, context) => {
 				const input = getChannelIndex(action.options, self.mineola.inputCount)
 				const value = Number(action.options.sensitivity)
-				await sendCommand(self, { comhead: 'set_input_sensitivity', sensitivity: value }, context.signal, () => {
-					self.mineola.inputSensitivity = { source: input, sensitivity: value }
-				})
+				await sendCommand(
+					self,
+					{ comhead: 'set_input_sensitivity', source: input, sensitivity: value },
+					context.signal,
+					() => {
+						self.mineola.inputSensitivity = { source: input, sensitivity: value }
+					},
+				)
 			},
 			learn: (action) => {
 				const input = getChannelIndex(action.options, self.mineola.inputCount)

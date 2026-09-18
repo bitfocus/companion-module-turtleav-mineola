@@ -82,3 +82,52 @@ describe('dropdown defaults', () => {
 		expect(checked).toBeGreaterThan(0)
 	})
 })
+
+describe('per-channel commands carry the channel', () => {
+	/**
+	 * Checked against a TAV-MINEOLA22XLR (firmware V1.10.10) on 2026-09-18: sent without `source` the device
+	 * replies {"comhead":"set_output_level","result":0} and changes nothing; with `source` it replies result 1 and
+	 * the addressed channel changes. set_input_sensitivity behaves the same way.
+	 */
+	const runAction = async (id: ActionId, options: Record<string, unknown>) => {
+		const setActionDefinitions = vi.fn<(defs: CompanionActionDefinitions<ActionSchema>) => void>()
+		const httpPost = vi.fn(async (msg: { comhead: string }) => ({ data: { comhead: msg.comhead, result: 1 } }))
+		const self = {
+			mineola: {
+				inputCount: 2,
+				outputCount: 2,
+				presetCount: 2,
+				inputs: { input_name: ['In 1', 'In 2'], input_sensitivity: [0, 5] },
+				outputs: { output_name: ['Out 1', 'Out 2'], select_level: [0, 4] },
+				presets: { name: ['A', 'B'] },
+			},
+			setActionDefinitions,
+			httpPost,
+		} as unknown as ModuleInstance
+		UpdateActions(self)
+		const def = setActionDefinitions.mock.calls[0][0][id]
+		if (!def) throw new Error(`${id} has no definition`)
+
+		await def.callback(
+			{ id: 'action-1', controlId: 'bank-1', actionId: id, surfaceId: undefined, options } as never,
+			{ signal: new AbortController().signal } as never,
+		)
+		return httpPost.mock.calls[0][0]
+	}
+
+	it('set_output_level names the output', async () => {
+		expect(await runAction(ActionId.OutputLevel, { channel: 2, level: 3 })).toEqual({
+			comhead: 'set_output_level',
+			source: 1,
+			level: 3,
+		})
+	})
+
+	it('set_input_sensitivity names the input', async () => {
+		expect(await runAction(ActionId.InputSensitivity, { channel: 2, sensitivity: 3 })).toEqual({
+			comhead: 'set_input_sensitivity',
+			source: 1,
+			sensitivity: 3,
+		})
+	})
+})
