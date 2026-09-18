@@ -85,7 +85,7 @@ const STATE_CHOICES = [
 	{ id: 2, label: 'Toggle' },
 ] as const satisfies DropdownChoice<ToggleState>[]
 
-const MUTE_CHOICES = [
+export const MUTE_CHOICES = [
 	{ id: 0, label: 'On' },
 	{ id: 1, label: 'Muted' },
 	{ id: 2, label: 'Toggle' },

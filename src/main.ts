@@ -6,6 +6,7 @@ import { UpdateActions, type ActionSchema } from './actions.js'
 import { handleError } from './errors.js'
 import { UpdateFeedbacks, type FeedbackSchema } from './feedbacks.js'
 import { UpdatePresets } from './presets.js'
+import { UpdateCompositeElements, type CompositeElementSchema } from './composites.js'
 import { StatusManager } from './status.js'
 import { Mineola, type MineolaStateEvent } from './mineola.js'
 import type { HttpMessage } from './types.js'
@@ -35,6 +36,7 @@ export type ModuleTypes = {
 	actions: ActionSchema
 	feedbacks: FeedbackSchema
 	variables: VariablesSchema
+	compositeElements: CompositeElementSchema
 }
 
 export { UpgradeScripts }
@@ -290,6 +292,8 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 			this.updateActions()
 			this.updateFeedbacks()
 			this.updateVariableDefinitions()
+			// Before presets, which place the composite elements
+			this.updateCompositeElements()
 			this.updatePresets()
 		} catch (err) {
 			handleError(err, this)
@@ -401,6 +405,10 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 
 	updatePresets(): void {
 		UpdatePresets(this)
+	}
+
+	updateCompositeElements(): void {
+		UpdateCompositeElements(this)
 	}
 
 	updateVariableDefinitions(): void {

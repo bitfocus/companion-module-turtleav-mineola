@@ -94,3 +94,9 @@ This module uses HTTP & WebSockets to control the Turtle AV Mineola audio proces
 ### Variables
 
 All feedback values are available as variables for use in button text and expressions.
+
+### Presets
+
+**Channels › Inputs / Outputs** has one layered button per input and output. Each shows the channel name, with a signal meter. Pressing it toggles the channel's mute.
+
+The meter is also available on its own as the **Signal Meter** composite element.
