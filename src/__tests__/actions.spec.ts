@@ -131,3 +131,53 @@ describe('per-channel commands carry the channel', () => {
 		})
 	})
 })
+
+describe('device rejections', () => {
+	/**
+	 * The device reports a refused command as {"comhead":"…","result":0} rather than an error payload — that is how
+	 * set_output_level went unnoticed as a no-op. Treated the same as an explicit error: throw, and leave local state
+	 * alone, so Companion logs it and the module does not claim a change the device never made.
+	 */
+	const runWithResult = async (result: number) => {
+		const setActionDefinitions = vi.fn<(defs: CompanionActionDefinitions<ActionSchema>) => void>()
+		const httpPost = vi.fn(async (msg: { comhead: string }) => ({ data: { comhead: msg.comhead, result } }))
+		const mineola: Record<string, unknown> = {
+			inputCount: 2,
+			outputCount: 2,
+			presetCount: 2,
+			inputs: { input_name: ['In 1', 'In 2'], input_sensitivity: [0, 5] },
+			outputs: { output_name: ['Out 1', 'Out 2'], select_level: [0, 4] },
+			presets: { name: ['A', 'B'] },
+		}
+		const self = { mineola, setActionDefinitions, httpPost } as unknown as ModuleInstance
+		UpdateActions(self)
+		const def = setActionDefinitions.mock.calls[0][0][ActionId.OutputLevel]
+		if (!def) throw new Error('outputLevel has no definition')
+
+		const call = def.callback(
+			{
+				id: 'action-1',
+				controlId: 'bank-1',
+				actionId: ActionId.OutputLevel,
+				surfaceId: undefined,
+				options: { channel: 2, level: 3 },
+			},
+			{ signal: new AbortController().signal } as never,
+		)
+		return { call, mineola }
+	}
+
+	it('throws when the device refuses the command with result 0', async () => {
+		const { call, mineola } = await runWithResult(0)
+
+		await expect(call).rejects.toThrow(/set_output_level/)
+		expect(mineola.outputLevel).toBeUndefined()
+	})
+
+	it('accepts result 1', async () => {
+		const { call, mineola } = await runWithResult(1)
+
+		await expect(call).resolves.toBeUndefined()
+		expect(mineola.outputLevel).toEqual({ source: 1, level: 3 })
+	})
+})

@@ -128,8 +128,13 @@ async function sendCommand(
 	const response = await self.httpPost(command, 1, signal)
 	const msg = SetOrErrorResponseSchema.parse(response.data)
 	if ('error' in msg) throw new Error(msg.error)
+	// The device refuses a command with result 0 rather than an error payload
+	if (msg.result === 0) throw new Error(`Device refused ${command.comhead}: ${JSON.stringify(command)}`)
 	if (msg.result === 1 && msg.comhead === command.comhead && onSuccess) {
 		onSuccess()
+		return
+	} else {
+		logger.warn(`Unexpected response to ${command.comhead}: ${JSON.stringify(msg)}`)
 	}
 }
 
