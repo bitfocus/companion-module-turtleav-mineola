@@ -37,7 +37,7 @@
 		"@companion-module/tools": "^3.1.0",
 		"@types/node": "^26.5.1",
 		"@types/ws": "^8.18.1",
-		"@vitest/coverage-v8": "5.0.0",
+		"@vitest/coverage-v8": "5.0.1",
 		"eslint": "^10.10.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^17.5.1",
@@ -46,7 +46,7 @@
 		"typescript": "~6.0.3",
 		"typescript-eslint": "^8.70.0",
 		"vite": "^8.3.0",
-		"vitest": "5.0.0"
+		"vitest": "5.0.1"
 	},
 	"prettier": "@companion-module/tools/.prettierrc.json",
 	"lint-staged": {
