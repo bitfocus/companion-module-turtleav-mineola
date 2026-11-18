@@ -48,36 +48,36 @@ export enum FeedbackId {
 type NoOptions = Record<string, never>
 type ChannelOptions = { channel: number }
 type BooleanFeedback<TOptions> = { type: 'boolean'; options: TOptions }
-type ValueFeedback<TOptions> = { type: 'value'; options: TOptions }
+type ValueFeedback<TOptions, TResult extends JsonValue> = { type: 'value'; options: TOptions; result: TResult }
 
 export type FeedbackSchema = {
 	[FeedbackId.Power]: BooleanFeedback<NoOptions>
 	[FeedbackId.OutputMasterMute]: BooleanFeedback<NoOptions>
-	[FeedbackId.OutputMasterVolume]: ValueFeedback<NoOptions>
+	[FeedbackId.OutputMasterVolume]: ValueFeedback<NoOptions, number>
 	[FeedbackId.InputMute]: BooleanFeedback<ChannelOptions>
 	[FeedbackId.InputP48]: BooleanFeedback<ChannelOptions>
-	[FeedbackId.InputGain]: ValueFeedback<ChannelOptions>
-	[FeedbackId.InputSensitivity]: ValueFeedback<ChannelOptions>
-	[FeedbackId.InputName]: ValueFeedback<ChannelOptions>
-	[FeedbackId.InputSignalLevel]: ValueFeedback<ChannelOptions>
+	[FeedbackId.InputGain]: ValueFeedback<ChannelOptions, number>
+	[FeedbackId.InputSensitivity]: ValueFeedback<ChannelOptions, InputSensitivity>
+	[FeedbackId.InputName]: ValueFeedback<ChannelOptions, string>
+	[FeedbackId.InputSignalLevel]: ValueFeedback<ChannelOptions, number>
 	[FeedbackId.OutputMute]: BooleanFeedback<ChannelOptions>
 	[FeedbackId.OutputMasterOutMember]: BooleanFeedback<ChannelOptions>
-	[FeedbackId.OutputGain]: ValueFeedback<ChannelOptions>
-	[FeedbackId.OutputDelay]: ValueFeedback<ChannelOptions>
-	[FeedbackId.OutputName]: ValueFeedback<ChannelOptions>
-	[FeedbackId.OutputLevel]: ValueFeedback<ChannelOptions>
-	[FeedbackId.OutputSignalLevel]: ValueFeedback<ChannelOptions>
+	[FeedbackId.OutputGain]: ValueFeedback<ChannelOptions, number>
+	[FeedbackId.OutputDelay]: ValueFeedback<ChannelOptions, number>
+	[FeedbackId.OutputName]: ValueFeedback<ChannelOptions, string>
+	[FeedbackId.OutputLevel]: ValueFeedback<ChannelOptions, OutputLevel>
+	[FeedbackId.OutputSignalLevel]: ValueFeedback<ChannelOptions, number>
 	[FeedbackId.PresetValid]: BooleanFeedback<ChannelOptions>
-	[FeedbackId.PresetName]: ValueFeedback<ChannelOptions>
-	[FeedbackId.InfoModel]: ValueFeedback<NoOptions>
-	[FeedbackId.InfoVersion]: ValueFeedback<NoOptions>
-	[FeedbackId.InfoMcuVersion]: ValueFeedback<NoOptions>
-	[FeedbackId.InfoDepSdk]: ValueFeedback<NoOptions>
-	[FeedbackId.InfoHostName]: ValueFeedback<NoOptions>
-	[FeedbackId.InfoMacPrimary]: ValueFeedback<NoOptions>
-	[FeedbackId.InfoMacSecondary]: ValueFeedback<NoOptions>
-	[FeedbackId.InfoIpPrimary]: ValueFeedback<NoOptions>
-	[FeedbackId.InfoIpSecondary]: ValueFeedback<NoOptions>
+	[FeedbackId.PresetName]: ValueFeedback<ChannelOptions, string>
+	[FeedbackId.InfoModel]: ValueFeedback<NoOptions, string>
+	[FeedbackId.InfoVersion]: ValueFeedback<NoOptions, string>
+	[FeedbackId.InfoMcuVersion]: ValueFeedback<NoOptions, string>
+	[FeedbackId.InfoDepSdk]: ValueFeedback<NoOptions, string>
+	[FeedbackId.InfoHostName]: ValueFeedback<NoOptions, string>
+	[FeedbackId.InfoMacPrimary]: ValueFeedback<NoOptions, string>
+	[FeedbackId.InfoMacSecondary]: ValueFeedback<NoOptions, string>
+	[FeedbackId.InfoIpPrimary]: ValueFeedback<NoOptions, string>
+	[FeedbackId.InfoIpSecondary]: ValueFeedback<NoOptions, string>
 }
 
 type SubscriptionKey = MineolaStateEvent
@@ -141,11 +141,11 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		unsubscribe: feedbackUnsubscribe(self, key),
 	})
 
-	const simpleValue = (
+	const simpleValue = <TResult extends JsonValue>(
 		name: string,
 		key: SubscriptionKey,
-		getValue: () => JsonValue,
-	): CompanionValueFeedbackDefinition<NoOptions> => ({
+		getValue: () => TResult,
+	): CompanionValueFeedbackDefinition<NoOptions, TResult> => ({
 		type: 'value',
 		name,
 		options: [],
@@ -175,13 +175,13 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		unsubscribe: feedbackUnsubscribe(self, key),
 	})
 
-	const channelValue = (
+	const channelValue = <TResult extends JsonValue>(
 		name: string,
 		channelType: ChannelType,
 		count: number,
 		key: SubscriptionKey,
-		getValue: (index: number) => JsonValue,
-	): CompanionValueFeedbackDefinition<ChannelOptions> => ({
+		getValue: (index: number) => TResult,
+	): CompanionValueFeedbackDefinition<ChannelOptions, TResult> => ({
 		type: 'value',
 		name,
 		options: [ChannelOption(channelNames(channelType), channelType)],

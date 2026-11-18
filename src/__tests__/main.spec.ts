@@ -1,8 +1,13 @@
+import { InstanceStatus } from '@companion-module/base'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import axios, { CanceledError, type AxiosInstance } from 'axios'
 import ModuleInstance from '../main.js'
+import type { HttpMessage } from '../types.js'
 import { informationStatus2x2, inputStatus2x2, outputStatus2x2, presetStatus, response } from './fixtures.js'
 
-// Enough of InstanceBase to construct the module without a Companion host, and quiet loggers
+const logger = vi.hoisted(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }))
+
+// Enough of InstanceBase to construct the module without a Companion host, and loggers that record rather than print
 vi.mock('@companion-module/base', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('@companion-module/base')>()
 	class InstanceBase {
@@ -12,8 +17,7 @@ vi.mock('@companion-module/base', async (importOriginal) => {
 		checkAllFeedbacks(): void {}
 		checkFeedbacksById(): void {}
 	}
-	const quiet = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
-	return { ...actual, InstanceBase, createModuleLogger: () => quiet }
+	return { ...actual, InstanceBase, createModuleLogger: () => logger }
 })
 
 // No real sockets in unit tests: a WebSocket that never connects
@@ -187,5 +191,80 @@ describe('initial connection retry', () => {
 
 		expect(attempts()).toBe(0)
 		await instance.destroy()
+	})
+})
+
+describe('polling torn down by a config change or destroy', () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+		vi.clearAllMocks()
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+		vi.restoreAllMocks()
+	})
+
+	/**
+	 * Drives the real httpPost, queue and #cleanup, faking only the axios client. The device answers the initial
+	 * connection, then holds every request until its signal aborts, as a slow device would. Two action requests are
+	 * sent just before polling starts, so the IO poll's two requests take the queue's other two slots and the preset
+	 * and information polls (priority 0) wait behind them: teardown aborts the first kind and clear() rejects the
+	 * second.
+	 */
+	async function connectMidPoll() {
+		const instance = new ModuleInstance({})
+		const device = { answering: true }
+		const payloads: Record<string, () => object> = {
+			get_input_status: inputStatus2x2,
+			get_output_status: outputStatus2x2,
+			get_preset_status: presetStatus,
+			get_information_status: informationStatus2x2,
+		}
+		const post = vi.fn(async (_url: string, data: HttpMessage, { signal }: { signal: AbortSignal }) => {
+			if (device.answering) return response(payloads[data.comhead]())
+			return await new Promise<never>((_resolve, reject) => {
+				signal.addEventListener('abort', () => reject(new CanceledError()), { once: true })
+			})
+		})
+		vi.spyOn(axios, 'create').mockReturnValue({ post } as unknown as AxiosInstance)
+		vi.spyOn(instance, 'updateAllDefs').mockImplementation(() => {
+			device.answering = false
+			for (let i = 0; i < 2; i++) instance.httpPost({ comhead: 'get_dsp_status' }).catch(() => {})
+		})
+		const httpPost = vi.spyOn(instance, 'httpPost')
+		instance.feedbackSubscriptions.inputs.add('fb-inputs')
+		instance.feedbackSubscriptions.outputs.add('fb-outputs')
+		instance.feedbackSubscriptions.presets.add('fb-presets')
+		instance.feedbackSubscriptions.information.add('fb-info')
+
+		await instance.configUpdated({ host: '10.0.0.9', verbose: false })
+		await vi.advanceTimersByTimeAsync(0)
+		// 4 to connect, 2 actions, then 4 polling: 2 running, 2 waiting
+		expect(post).toHaveBeenCalledTimes(8)
+		expect(httpPost).toHaveBeenCalledTimes(10)
+		const updateStatus = vi.spyOn(instance.statusManager, 'updateStatus')
+		return { instance, httpPost, updateStatus }
+	}
+
+	it('logs nothing and leaves the status alone when the config changes', async () => {
+		const { instance, updateStatus } = await connectMidPoll()
+
+		await instance.configUpdated({ host: '', verbose: false })
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(logger.error).not.toHaveBeenCalled()
+		expect(logger.warn).not.toHaveBeenCalled()
+		expect(updateStatus.mock.calls.map(([status]) => status)).toEqual([InstanceStatus.BadConfig])
+		await instance.destroy()
+	})
+
+	it('stops polling on destroy', async () => {
+		const { instance, httpPost } = await connectMidPoll()
+
+		await instance.destroy()
+		await vi.advanceTimersByTimeAsync(60_000)
+
+		expect(httpPost).toHaveBeenCalledTimes(10)
+		expect(logger.error).not.toHaveBeenCalled()
 	})
 })

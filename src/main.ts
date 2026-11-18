@@ -310,11 +310,17 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 		{ edges: ['trailing'] },
 	)
 
+	/**
+	 * Each poll captures the controller it started under. A configUpdated or destroy part way through aborts it, and
+	 * #cleanup's queue.clear() rejects the requests still waiting (p-queue 10; 9 left them pending forever). Neither is
+	 * a device fault, so a torn-down poll logs nothing, leaves the status alone and does not re-arm its timer.
+	 */
 	async #startPolling(): Promise<void> {
 		await Promise.all([this.#pollIO(), this.#pollPresets(), this.#pollInfo()])
 	}
 
 	async #pollIO(): Promise<void> {
+		const { signal } = this.#controller
 		if (this.#pollTimers.io) clearTimeout(this.#pollTimers.io)
 
 		try {
@@ -353,8 +359,9 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 				await Promise.all(requests)
 			}
 		} catch (err) {
-			handleError(err, this)
+			if (!signal.aborted) handleError(err, this)
 		}
+		if (signal.aborted) return
 
 		this.#pollTimers.io = setTimeout(() => {
 			this.#pollIO().catch(() => {})
@@ -362,6 +369,7 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 	}
 
 	async #pollPresets(): Promise<void> {
+		const { signal } = this.#controller
 		if (this.#pollTimers.preset) clearTimeout(this.#pollTimers.preset)
 
 		try {
@@ -370,8 +378,9 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 				this.mineola.presets = presets
 			}
 		} catch (err) {
-			handleError(err, this)
+			if (!signal.aborted) handleError(err, this)
 		}
+		if (signal.aborted) return
 
 		this.#pollTimers.preset = setTimeout(() => {
 			this.#pollPresets().catch(() => {})
@@ -379,6 +388,7 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 	}
 
 	async #pollInfo(): Promise<void> {
+		const { signal } = this.#controller
 		if (this.#pollTimers.information) clearTimeout(this.#pollTimers.information)
 
 		try {
@@ -387,8 +397,9 @@ export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 				this.mineola.info = info
 			}
 		} catch (err) {
-			handleError(err, this)
+			if (!signal.aborted) handleError(err, this)
 		}
+		if (signal.aborted) return
 
 		this.#pollTimers.information = setTimeout(() => {
 			this.#pollInfo().catch(() => {})
