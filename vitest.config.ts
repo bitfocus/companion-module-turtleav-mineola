@@ -7,7 +7,7 @@ export default defineConfig({
 		include: ['src/**/*.spec.ts'],
 		coverage: {
 			provider: 'v8',
-			// text for the CI log, lcov for Codecov (node.yaml uploads ./coverage/lcov.info), html for browsing locally
+			// text for the CI log, lcov for Codecov (test.yaml uploads ./coverage/lcov.info), html for browsing locally
 			reporter: ['text', 'lcov', 'html'],
 			reportsDirectory: './coverage',
 			include: ['src/**/*.ts'],
